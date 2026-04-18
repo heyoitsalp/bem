@@ -6,8 +6,8 @@ const app = express();
 let isGameOpen = true; // Oyunun durumu burada tutuluyor
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-const TOKEN = 'BOT_TOKEN_BURAYA';
-const CLIENT_ID = 'BOT_ID_BURAYA';
+const TOKEN = 'MTQ5NTAxNzc5Mjc1NDQxNzY2NA.GleXrj.L0kpTBnqzHlYZ5EG-L-TzwM-17yYcXMejEHiV4';
+const CLIENT_ID = '1495017792754417664';
 
 // --- ROBLOX API KISMI ---
 app.get('/check-status', (req, res) => {
