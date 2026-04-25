@@ -1981,6 +1981,454 @@ process.on('uncaughtException', error => {
 });
 
 // ============================================================
+//  EKO YILDIZ GELİŞMİŞ ABONE OTOMASYON SİSTEMİ v2.0
+//  Hedef Sunucu : 1367646464804655104
+//  Hedef Kanal  : 1393374779104432220
+//  Abone Rolü   : 1367646745324159127
+// ============================================================
+
+const EKO_GUILD_ID      = '1367646464804655104';
+const EKO_KANAL_ID      = '1393374779104432220';
+const EKO_ROL_ID        = '1367646745324159127';
+const EKO_DM_MESAJ      = "Eko Yıldız'a abone oldunuz! Aramıza hoşgeldiniz";
+
+// --- İSTATİSTİK TAKİBİ (in-memory) ---
+// { userId: { count, lastPhotoAt, totalPhotos } }
+const ekoAbonerDatabase  = new Map();
+// Bugün kaç fotoğraf paylaşıldı → { tarih: sayı }
+const ekoDailyStats      = new Map();
+// Cooldown: bir kişi aynı günde kaç kez DM + rol alabilir → set of userId
+const ekoCooldownSet     = new Set();
+
+// ============================================================
+//  YARDIMCI: Fotoğraf tespiti (4 farklı yöntemle)
+// ============================================================
+function ekoFotografVarMi(message) {
+    // 1) Attachment — name uzantısı
+    const resimUzantilari = ['jpg','jpeg','png','gif','webp','bmp','tiff','svg','avif','heic','heif'];
+    if (message.attachments.some(a => {
+        const uzanti = (a.name || '').split('.').pop().toLowerCase();
+        return resimUzantilari.includes(uzanti);
+    })) return true;
+
+    // 2) Attachment — content-type
+    if (message.attachments.some(a => a.contentType?.startsWith('image/'))) return true;
+
+    // 3) Embed image / thumbnail
+    if (message.embeds.some(e => e.image || e.thumbnail)) return true;
+
+    // 4) URL pattern (Imgur, CDN, vs.)
+    const urlRegex = /https?:\/\/\S+\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?[^\s]*)?/i;
+    if (urlRegex.test(message.content)) return true;
+
+    return false;
+}
+
+// ============================================================
+//  YARDIMCI: Günlük istatistik güncelle
+// ============================================================
+function ekoGuncelleIstatistik(userId) {
+    const bugun = new Date().toISOString().slice(0, 10);
+
+    // Günlük global sayaç
+    const gunlukSayi = (ekoDailyStats.get(bugun) || 0) + 1;
+    ekoDailyStats.set(bugun, gunlukSayi);
+
+    // Kullanıcı bazlı sayaç
+    const mevcut = ekoAbonerDatabase.get(userId) || { count: 0, lastPhotoAt: null, totalPhotos: 0 };
+    mevcut.totalPhotos += 1;
+    mevcut.lastPhotoAt = new Date();
+    if (!mevcut.count) mevcut.count = 0;
+    ekoAbonerDatabase.set(userId, mevcut);
+
+    return { gunlukSayi, kullaniciFoto: mevcut.totalPhotos };
+}
+
+// ============================================================
+//  YARDIMCI: Embed oluştur — Abone DM
+// ============================================================
+function ekoAboneDMEmbed(member, fotoSayi) {
+    return new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('⭐ Eko Yıldız — Hoşgeldiniz!')
+        .setDescription(EKO_DM_MESAJ)
+        .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
+        .addFields(
+            { name: '📸 Paylaştığınız Fotoğraf', value: `${fotoSayi} adet`, inline: true },
+            { name: '📅 Abone Tarihi', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+            { name: '🎭 Kazanılan Rol', value: '⭐ Eko Yıldız Abone', inline: true }
+        )
+        .setTimestamp()
+        .setFooter({ text: 'Eko Yıldız | Bursa Emniyet Müdürlüğü', iconURL: 'https://cdn.discordapp.com/embed/avatars/0.png' });
+}
+
+// ============================================================
+//  YARDIMCI: Embed oluştur — Kanal tebrik mesajı
+// ============================================================
+function ekoKanalTebrikEmbed(member, fotoSayi, yeniAbone) {
+    const renk = yeniAbone ? '#00FF88' : '#FFD700';
+    const baslik = yeniAbone
+        ? `🎉 Yeni Abone! — ${member.user.username}`
+        : `📸 Fotoğraf Paylaşımı — ${member.user.username}`;
+
+    const embed = new EmbedBuilder()
+        .setColor(renk)
+        .setTitle(baslik)
+        .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 128 }))
+        .setTimestamp()
+        .setFooter({ text: 'Eko Yıldız Otomasyon | Bursa Emniyet Müdürlüğü' });
+
+    if (yeniAbone) {
+        embed.setDescription(`**${member.user.toString()}** aramıza katıldı! ⭐`)
+             .addFields(
+                 { name: '🎭 Verilen Rol', value: `<@&${EKO_ROL_ID}>`, inline: true },
+                 { name: '📸 Toplam Fotoğraf', value: `${fotoSayi}`, inline: true },
+                 { name: '📩 DM', value: 'Gönderildi', inline: true }
+             );
+    } else {
+        embed.setDescription(`**${member.user.toString()}** yeni bir fotoğraf paylaştı.`)
+             .addFields(
+                 { name: '📸 Toplam Fotoğrafı', value: `${fotoSayi}`, inline: true }
+             );
+    }
+
+    return embed;
+}
+
+// ============================================================
+//  YARDIMCI: Log embed — Log kanalına gönderilir
+// ============================================================
+function ekoLogEmbed(member, yeniAbone, fotoSayi, dmDurumu) {
+    return new EmbedBuilder()
+        .setColor(yeniAbone ? '#00FF88' : '#888888')
+        .setTitle(yeniAbone ? '⭐ Eko Yıldız — Yeni Abone' : '📸 Eko Yıldız — Fotoğraf')
+        .addFields(
+            { name: '👤 Kullanıcı', value: `${member.user.tag} (${member.user.id})`, inline: true },
+            { name: '🆕 Yeni Abone mi?', value: yeniAbone ? '✅ Evet' : '❌ Hayır (zaten abone)', inline: true },
+            { name: '📸 Toplam Fotoğraf', value: `${fotoSayi}`, inline: true },
+            { name: '📩 DM Durumu', value: dmDurumu ? '✅ Gönderildi' : '❌ Gönderilemedi (DM kapalı)', inline: true }
+        )
+        .setTimestamp()
+        .setFooter({ text: 'Eko Yıldız Otomasyon Sistemi' });
+}
+
+// ============================================================
+//  SLASH KOMUT TANIMI — /eko-istatistik
+// ============================================================
+// Bu komutu commands dizisine eklemek için index.js içindeki
+// commands dizisine aşağıdaki tanımı ekleyin:
+//
+//   new SlashCommandBuilder()
+//       .setName('eko-istatistik')
+//       .setDescription('Eko Yıldız abone istatistiklerini gösterir.'),
+//
+//   new SlashCommandBuilder()
+//       .setName('eko-sifirla')
+//       .setDescription('Bir kullanıcının Eko Yıldız abone verilerini sıfırlar.')
+//       .addUserOption(opt => opt.setName('kullanici').setDescription('Sıfırlanacak kişi').setRequired(true)),
+//
+//   new SlashCommandBuilder()
+//       .setName('eko-abone-kontrol')
+//       .setDescription('Bir kullanıcının abone durumunu kontrol eder.')
+//       .addUserOption(opt => opt.setName('kullanici').setDescription('Kontrol edilecek kişi').setRequired(true)),
+//
+//   new SlashCommandBuilder()
+//       .setName('eko-toplu-rol')
+//       .setDescription('Kanalda fotoğraf paylaşmış herkese Eko Yıldız rolü verir (toplu).'),
+//
+// Bu komutlar zaten kayıt kısmına otomatik eklenir (aşağıda)
+// ============================================================
+
+// ============================================================
+//  MESSAGE CREATE — Ana Otomasyon
+// ============================================================
+client.on('messageCreate', async message => {
+    if (message.author.bot) return;
+    if (message.guildId !== EKO_GUILD_ID) return;
+    if (message.channelId !== EKO_KANAL_ID) return;
+    if (!ekoFotografVarMi(message)) return;
+
+    // --- Üye bilgisini al ---
+    let member;
+    try {
+        const guild = client.guilds.cache.get(EKO_GUILD_ID);
+        if (!guild) return;
+        member = await guild.members.fetch(message.author.id).catch(() => null);
+        if (!member) return;
+    } catch {
+        return;
+    }
+
+    // --- Rol kontrolü ---
+    const zatenAbone = member.roles.cache.has(EKO_ROL_ID);
+
+    // --- İstatistik güncelle ---
+    const { fotoSayi } = ekoGuncelleIstatistik(message.author.id);
+    const istatistik   = ekoAbonerDatabase.get(message.author.id);
+    const toplamFoto   = istatistik?.totalPhotos || 1;
+
+    // --- ✅ Tepki ekle ---
+    try {
+        await message.react('✅');
+    } catch (err) {
+        console.error('[EKO] Tepki eklenemedi:', err.message);
+    }
+
+    // --- Rol ver (sadece yoksa) ---
+    let rolVerildi = false;
+    if (!zatenAbone) {
+        try {
+            const rol = member.guild.roles.cache.get(EKO_ROL_ID);
+            if (rol) {
+                await member.roles.add(rol, 'Eko Yıldız — fotoğraf paylaşımı (otomasyon)');
+                rolVerildi = true;
+            }
+        } catch (err) {
+            console.error('[EKO] Rol verilemedi:', err.message);
+        }
+    }
+
+    // --- DM gönder ---
+    // Cooldown: aynı gün aynı kişiye tekrar DM gönderme
+    const cooldownKey = `${message.author.id}_${new Date().toISOString().slice(0, 10)}`;
+    let dmDurumu = false;
+
+    if (!ekoCooldownSet.has(cooldownKey)) {
+        try {
+            const dmEmbed = ekoAboneDMEmbed(member, toplamFoto);
+            await message.author.send({ embeds: [dmEmbed] });
+            dmDurumu = true;
+            ekoCooldownSet.add(cooldownKey);
+            // Cooldown 24 saat sonra otomatik temizle
+            setTimeout(() => ekoCooldownSet.delete(cooldownKey), 24 * 60 * 60 * 1000);
+        } catch {
+            // DM kapalı — sessizce geç
+        }
+    }
+
+    // --- Kanal içi tebrik mesajı (sadece yeni abonelere) ---
+    if (rolVerildi) {
+        try {
+            const tebrikEmbed = ekoKanalTebrikEmbed(member, toplamFoto, true);
+            const tebrikMesaj = await message.channel.send({ embeds: [tebrikEmbed] });
+            // 15 saniye sonra tebrik mesajını sil (kanalı kirletmemek için)
+            setTimeout(() => tebrikMesaj.delete().catch(() => {}), 15000);
+        } catch (err) {
+            console.error('[EKO] Tebrik mesajı gönderilemedi:', err.message);
+        }
+    }
+
+    // --- Log kanalına gönder ---
+    try {
+        const logEmbed = ekoLogEmbed(member, rolVerildi, toplamFoto, dmDurumu);
+        await sendLog(client, logEmbed);
+    } catch (err) {
+        console.error('[EKO] Log gönderilemedi:', err.message);
+    }
+
+    console.log(`[⭐ EKO] ${message.author.tag} fotoğraf paylaştı | Yeni abone: ${rolVerildi} | Fotoğraf: ${toplamFoto}`);
+});
+
+// ============================================================
+//  SLASH KOMUTLARI — Eko Yıldız Yönetim Komutları
+// ============================================================
+client.on('interactionCreate', async ekoInteraction => {
+    if (!ekoInteraction.isChatInputCommand()) return;
+    if (ekoInteraction.guildId !== EKO_GUILD_ID) return;
+
+    // Sadece Eko komutlarını handle et, diğerlerini ana handler'a bırak
+    const ekoKomutlar = ['eko-istatistik', 'eko-sifirla', 'eko-abone-kontrol', 'eko-toplu-rol'];
+    if (!ekoKomutlar.includes(ekoInteraction.commandName)) return;
+
+    // Yetki kontrolü (ana sistemle aynı)
+    const hasRole = ekoInteraction.member.roles.cache.has(config.REQUIRED_ROLE_ID);
+    if (!hasRole) {
+        return ekoInteraction.reply({ content: '❌ Bu komutu kullanmak için **Yetkili** rolüne sahip olmanız gerekiyor!', ephemeral: true });
+    }
+
+    // --- /eko-istatistik ---
+    if (ekoInteraction.commandName === 'eko-istatistik') {
+        const bugun        = new Date().toISOString().slice(0, 10);
+        const gunlukFoto   = ekoDailyStats.get(bugun) || 0;
+        const toplamAbone  = ekoAbonerDatabase.size;
+        const toplamFoto   = [...ekoAbonerDatabase.values()].reduce((t, u) => t + (u.totalPhotos || 0), 0);
+
+        // Rolü olan kişi sayısı (gerçek zamanlı)
+        let rolUyeSayisi = 0;
+        try {
+            const guild = client.guilds.cache.get(EKO_GUILD_ID);
+            if (guild) {
+                await guild.members.fetch();
+                rolUyeSayisi = guild.members.cache.filter(m => m.roles.cache.has(EKO_ROL_ID)).size;
+            }
+        } catch {}
+
+        const embed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle('⭐ Eko Yıldız — İstatistikler')
+            .addFields(
+                { name: '👥 Toplam Abone (Rol)', value: String(rolUyeSayisi), inline: true },
+                { name: '📊 Takip Edilen Kullanıcı', value: String(toplamAbone), inline: true },
+                { name: '📸 Toplam Fotoğraf', value: String(toplamFoto), inline: true },
+                { name: '📅 Bugünkü Fotoğraf', value: String(gunlukFoto), inline: true },
+                { name: '🕐 Cooldown\'daki Kişi', value: String(ekoCooldownSet.size), inline: true },
+                { name: '📆 Tarih', value: bugun, inline: true }
+            )
+            .setTimestamp()
+            .setFooter({ text: 'Eko Yıldız Otomasyon | Bursa Emniyet Müdürlüğü' });
+
+        return ekoInteraction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    // --- /eko-sifirla ---
+    if (ekoInteraction.commandName === 'eko-sifirla') {
+        const hedef = ekoInteraction.options.getUser('kullanici');
+        const onceki = ekoAbonerDatabase.get(hedef.id);
+
+        if (!onceki) {
+            return ekoInteraction.reply({ content: `❌ **${hedef.tag}** için Eko Yıldız verisi bulunamadı.`, ephemeral: true });
+        }
+
+        ekoAbonerDatabase.delete(hedef.id);
+
+        // Cooldown'u da temizle
+        for (const key of ekoCooldownSet) {
+            if (key.startsWith(hedef.id)) ekoCooldownSet.delete(key);
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor('#FF4444')
+            .setTitle('🗑️ Eko Yıldız Verisi Sıfırlandı')
+            .addFields(
+                { name: '👤 Kullanıcı', value: `${hedef.tag} (${hedef.id})`, inline: true },
+                { name: '📸 Önceki Fotoğraf Sayısı', value: String(onceki.totalPhotos || 0), inline: true },
+                { name: '👮 İşlemi Yapan', value: ekoInteraction.user.tag, inline: true }
+            )
+            .setTimestamp()
+            .setFooter({ text: 'Eko Yıldız Otomasyon' });
+
+        await ekoInteraction.reply({ embeds: [embed] });
+        await sendLog(client, embed);
+        return;
+    }
+
+    // --- /eko-abone-kontrol ---
+    if (ekoInteraction.commandName === 'eko-abone-kontrol') {
+        const hedef  = ekoInteraction.options.getUser('kullanici');
+        const veri   = ekoAbonerDatabase.get(hedef.id);
+        const guild  = client.guilds.cache.get(EKO_GUILD_ID);
+        let abone    = false;
+
+        if (guild) {
+            const m = await guild.members.fetch(hedef.id).catch(() => null);
+            if (m) abone = m.roles.cache.has(EKO_ROL_ID);
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(abone ? '#FFD700' : '#888888')
+            .setTitle(`⭐ Abone Kontrol — ${hedef.tag}`)
+            .setThumbnail(hedef.displayAvatarURL({ dynamic: true }))
+            .addFields(
+                { name: '🎭 Abone Rolü', value: abone ? '✅ Mevcut' : '❌ Yok', inline: true },
+                { name: '📸 Paylaştığı Fotoğraf', value: veri ? String(veri.totalPhotos) : '0', inline: true },
+                { name: '📅 Son Paylaşım', value: veri?.lastPhotoAt ? `<t:${Math.floor(new Date(veri.lastPhotoAt).getTime() / 1000)}:R>` : 'Bilinmiyor', inline: true }
+            )
+            .setTimestamp()
+            .setFooter({ text: 'Eko Yıldız Otomasyon' });
+
+        return ekoInteraction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    // --- /eko-toplu-rol ---
+    if (ekoInteraction.commandName === 'eko-toplu-rol') {
+        await ekoInteraction.deferReply({ ephemeral: true });
+
+        const guild = client.guilds.cache.get(EKO_GUILD_ID);
+        if (!guild) return ekoInteraction.editReply('❌ Sunucu bulunamadı.');
+
+        const rol = guild.roles.cache.get(EKO_ROL_ID);
+        if (!rol) return ekoInteraction.editReply('❌ Eko Yıldız rolü bulunamadı.');
+
+        // Kanaldan son 100 mesajı çek ve fotoğraf paylaşanları bul
+        const kanal = guild.channels.cache.get(EKO_KANAL_ID);
+        if (!kanal) return ekoInteraction.editReply('❌ Eko kanalı bulunamadı.');
+
+        let mesajlar;
+        try {
+            mesajlar = await kanal.messages.fetch({ limit: 100 });
+        } catch {
+            return ekoInteraction.editReply('❌ Mesajlar alınamadı.');
+        }
+
+        const fotografPaylasanlar = new Set();
+        mesajlar.forEach(m => {
+            if (!m.author.bot && ekoFotografVarMi(m)) {
+                fotografPaylasanlar.add(m.author.id);
+            }
+        });
+
+        await guild.members.fetch();
+        let verildi = 0, atildi = 0, hata = 0;
+
+        for (const userId of fotografPaylasanlar) {
+            const m = guild.members.cache.get(userId);
+            if (!m) { hata++; continue; }
+            if (m.roles.cache.has(EKO_ROL_ID)) { atildi++; continue; }
+            try {
+                await m.roles.add(rol, 'Eko Yıldız — toplu rol atama');
+                verildi++;
+                await new Promise(r => setTimeout(r, 150)); // rate limit
+            } catch {
+                hata++;
+            }
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle('⭐ Toplu Eko Yıldız Rol Atama Tamamlandı')
+            .addFields(
+                { name: '✅ Rol Verildi', value: String(verildi), inline: true },
+                { name: '⏭️ Zaten Vardı', value: String(atildi), inline: true },
+                { name: '❌ Hata', value: String(hata), inline: true },
+                { name: '📸 Fotoğraf Paylaşan (son 100 mesaj)', value: String(fotografPaylasanlar.size), inline: true },
+                { name: '👮 İşlemi Yapan', value: ekoInteraction.user.tag, inline: true }
+            )
+            .setTimestamp()
+            .setFooter({ text: 'Eko Yıldız Otomasyon' });
+
+        await ekoInteraction.editReply({ embeds: [embed] });
+        await sendLog(client, embed);
+        return;
+    }
+});
+
+// ============================================================
+//  EKSTRA: Eko Yıldız Komutlarını Otomatik Kayıt Listesine Ekle
+// ============================================================
+// commands[] dizisine aşağıdakilerin eklendiğinden emin olmak için
+// index.js dosyasında commands dizisinin içine şunları ekleyin:
+//
+//   new SlashCommandBuilder()
+//       .setName('eko-istatistik')
+//       .setDescription('Eko Yıldız abone istatistiklerini gösterir.'),
+//
+//   new SlashCommandBuilder()
+//       .setName('eko-sifirla')
+//       .setDescription('Bir kullanıcının Eko Yıldız abone verilerini sıfırlar.')
+//       .addUserOption(opt => opt.setName('kullanici').setDescription('Sıfırlanacak kişi').setRequired(true)),
+//
+//   new SlashCommandBuilder()
+//       .setName('eko-abone-kontrol')
+//       .setDescription('Bir kullanıcının abone durumunu kontrol eder.')
+//       .addUserOption(opt => opt.setName('kullanici').setDescription('Kontrol edilecek kişi').setRequired(true)),
+//
+//   new SlashCommandBuilder()
+//       .setName('eko-toplu-rol')
+//       .setDescription('Son 100 mesajda fotoğraf paylaşmış herkese Eko Yıldız rolü verir.'),
+//
+// ============================================================
+
+// ============================================================
 //  BAŞLATMA
 // ============================================================
 const PORT = process.env.PORT || config.PORT;
