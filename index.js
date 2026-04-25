@@ -2,7 +2,60 @@ const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuild
 const { status, startApi } = require('./api'); 
 const config = require('./config.json'); 
 
-// Botun sunucudaki üyeleri yönetebilmesi için GuildMembers intent'ini ekledik
+// --- ROBLOX GRUP VE API AYARLARI ---
+const ROBLOX_GROUP_ID = 8505535;
+const ROMANAGER_API_KEY = "0d268477-793e-4b83-8edc-b936a922c866";
+
+// Rütbe Hiyerarşisi (Sıralı)
+const rankList = [
+    { name: "Akademi Adayı", id: 1 }, { name: "Akademi", id: 3 }, { name: "Polis Memuru Adayı", id: 6 },
+    { name: "Polis Memuru", id: 7 }, { name: "Kıdemli Polis Memuru", id: 8 }, { name: "Başpolis Memuru Adayı", id: 9 },
+    { name: "Başpolis Memuru", id: 10 }, { name: "Kıdemli Başpolis Memuru", id: 11 }, { name: "Uzm. Başpolis Memuru", id: 12 },
+    { name: "Aday Komiser", id: 13 }, { name: "Stajyer Komiser", id: 15 }, { name: "Komiser Yardımcısı", id: 16 },
+    { name: "Askomiser", id: 17 }, { name: "Komiser", id: 18 }, { name: "Üskomiser", id: 19 },
+    { name: "Başkomiser", id: 20 }, { name: "Amir Adayı", id: 21 }, { name: "Emniyet Amiri", id: 22 },
+    { name: "Müdür", id: 23 }, { name: "4. Sınıf Emniyet Müdürü", id: 24 }, { name: "3. Sınıf Emniyet Müdürü", id: 25 },
+    { name: "2. Sınıf Emniyet Müdürü", id: 26 }, { name: "1. Sınıf Emniyet Müdürü", id: 27 }, { name: "Emniyet Genel Müdürü", id: 28 },
+    { name: "Teftiş Kurulu", id: 29 }, { name: "Teftiş Kurulu Başkan Yardımcısı", id: 30 }, { name: "Teftiş Kurulu Başkanı", id: 31 },
+    { name: "Yüksek Polis Kurulu", id: 32 }
+];
+
+// --- YARDIMCI FONKSİYONLAR (ROBLOX API) ---
+async function getRobloxUser(username) {
+    const response = await fetch('https://users.roblox.com/v1/usernames/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usernames: [username], excludeBannedUsers: false })
+    });
+    const data = await response.json();
+    if (data.data && data.data.length > 0) return data.data[0];
+    return null;
+}
+
+async function getUserRankInGroup(userId) {
+    const response = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    const data = await response.json();
+    if (data && data.data) {
+        const group = data.data.find(g => g.group.id === ROBLOX_GROUP_ID);
+        if (group) return group.role.rank;
+    }
+    return 0; // Grupta değilse 0 döner
+}
+
+async function setRobloxRank(userId, rankId) {
+    const response = await fetch(`https://api.romanager.bot/v1/role/${userId}`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': ROMANAGER_API_KEY
+        },
+        body: JSON.stringify({ roleRank: rankId })
+    });
+    if (!response.ok) throw new Error("RoManager API Hatası");
+    return true;
+}
+
+// Bot Başlatma
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 const TOKEN = process.env.DISCORD_TOKEN; 
 
@@ -29,7 +82,16 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
                 .addStringOption(opt => opt.setName('sebep').setDescription('Atılma sebebi').setRequired(true)),
             new SlashCommandBuilder().setName('mute').setDescription('Kullanıcıya Susturulmuş rolü verir.')
                 .addUserOption(opt => opt.setName('kullanici').setDescription('Susturulacak kişi').setRequired(true))
-                .addStringOption(opt => opt.setName('sebep').setDescription('Susturma sebebi').setRequired(false))
+                .addStringOption(opt => opt.setName('sebep').setDescription('Susturma sebebi').setRequired(false)),
+                
+            // Roblox Rütbe Yönetimi
+            new SlashCommandBuilder().setName('terfi').setDescription('Kullanıcıyı bir üst rütbeye terfi ettirir.')
+                .addStringOption(opt => opt.setName('roblox_adi').setDescription('Roblox kullanıcı adı').setRequired(true)),
+            new SlashCommandBuilder().setName('tenzil').setDescription('Kullanıcıyı bir alt rütbeye düşürür.')
+                .addStringOption(opt => opt.setName('roblox_adi').setDescription('Roblox kullanıcı adı').setRequired(true)),
+            new SlashCommandBuilder().setName('rutbedegistir').setDescription('Kullanıcıya belirli bir rütbe atar.')
+                .addStringOption(opt => opt.setName('roblox_adi').setDescription('Roblox kullanıcı adı').setRequired(true))
+                .addIntegerOption(opt => opt.setName('rutbe_id').setDescription('Verilecek Rütbenin ID numarası (Örn: 22)').setRequired(true))
         ].map(command => command.toJSON());
 
         await rest.put(Routes.applicationCommands(config.CLIENT_ID), { body: commands });
@@ -55,6 +117,68 @@ client.on('interactionCreate', async interaction => {
     }
 
     const command = interaction.commandName;
+
+    // === ROBLOX RÜTBE SİSTEMLERİ ===
+    if (command === 'terfi' || command === 'tenzil' || command === 'rutbedegistir') {
+        await interaction.deferReply(); // Roblox API'si yavaş olabilir, botu bekletiyoruz.
+
+        const username = interaction.options.getString('roblox_adi');
+        const robloxUser = await getRobloxUser(username);
+
+        if (!robloxUser) {
+            return interaction.editReply(`❌ **${username}** adında bir Roblox kullanıcısı bulunamadı.`);
+        }
+
+        const currentRankId = await getUserRankInGroup(robloxUser.id);
+        if (currentRankId === 0) {
+            return interaction.editReply(`❌ **${robloxUser.name}** isimli kullanıcı emniyet grubumuzda değil!`);
+        }
+
+        const currentIndex = rankList.findIndex(r => r.id === currentRankId);
+        let newRankObj;
+
+        try {
+            if (command === 'terfi') {
+                if (currentIndex === -1 || currentIndex >= rankList.length - 1) {
+                    return interaction.editReply(`❌ Kullanıcı zaten en yüksek rütbede veya rütbesi listede yok.`);
+                }
+                newRankObj = rankList[currentIndex + 1];
+            } 
+            else if (command === 'tenzil') {
+                if (currentIndex <= 0) {
+                    return interaction.editReply(`❌ Kullanıcı daha fazla rütbe düşürülemez.`);
+                }
+                newRankObj = rankList[currentIndex - 1];
+            } 
+            else if (command === 'rutbedegistir') {
+                const requestedId = interaction.options.getInteger('rutbe_id');
+                newRankObj = rankList.find(r => r.id === requestedId);
+                if (!newRankObj) {
+                    return interaction.editReply(`❌ Belirtilen Rütbe ID'si geçersiz. Lütfen doğru bir ID girin.`);
+                }
+            }
+
+            // RoManager API İle Rütbeyi Uygula
+            await setRobloxRank(robloxUser.id, newRankObj.id);
+
+            const embed = new EmbedBuilder()
+                .setColor(command === 'tenzil' ? '#FF0000' : '#00FF00')
+                .setTitle('👮 Rütbe Güncellemesi Başarılı')
+                .addFields(
+                    { name: '👤 Kullanıcı', value: robloxUser.name, inline: true },
+                    { name: '🔄 Yeni Rütbe', value: `${newRankObj.name} (ID: ${newRankObj.id})`, inline: true }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'Bursa Emniyet Müdürlüğü Sistemleri' });
+
+            await interaction.editReply({ embeds: [embed] });
+
+        } catch (error) {
+            await interaction.editReply(`❌ Rütbe değiştirilirken bir hata oluştu. RoManager API'sini veya yetkileri kontrol edin.`);
+            console.error(error);
+        }
+        return;
+    }
 
     // === OYUN YÖNETİM SİSTEMLERİ ===
     if (command === 'oyun-yonet') {
@@ -88,25 +212,16 @@ client.on('interactionCreate', async interaction => {
 
         if (!member) return interaction.reply({ content: 'Bu kullanıcı sunucuda bulunamadı!', ephemeral: true });
 
-        // İşlem tipi (Ban veya Kick)
         const actionText = command === 'ban' ? 'banlandınız' : 'atıldınız';
-
-        // DM İçin Embed Mesaj Oluşturma
         const dmEmbed = new EmbedBuilder()
-            .setColor('#FF0000') // Kırmızı renk
+            .setColor('#FF0000') 
             .setTitle('🚨 Sunucudan Uzaklaştırıldınız!')
             .setDescription(`**${reason}** sebebiyle **${interaction.guild.name}** sunucusundan ${actionText}.. Baybay!`)
             .setTimestamp();
 
-        try {
-            // Önce DM atmayı dener (Kişi DM kapatmışsa hata verir, o yüzden try-catch içinde)
-            await user.send({ embeds: [dmEmbed] });
-        } catch (error) {
-            console.log("Kullanıcının DM'leri kapalı olduğu için mesaj gönderilemedi.");
-        }
+        try { await user.send({ embeds: [dmEmbed] }); } catch (error) { /* DM Kapalıysa Yoksay */ }
 
         try {
-            // Sonra işlemi uygular
             if (command === 'ban') {
                 await member.ban({ reason: reason });
                 await interaction.reply(`🔨 **${user.tag}** sunucudan başarıyla banlandı. Sebep: ${reason}`);
