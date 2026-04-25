@@ -2427,6 +2427,394 @@ client.on('interactionCreate', async ekoInteraction => {
 //       .setDescription('Son 100 mesajda fotoğraf paylaşmış herkese Eko Yıldız rolü verir.'),
 //
 // ============================================================
+// ============================================================
+//  EKO YILDIZ — ROBLOX GRUP KAYIT SİSTEMİ
+//  Sunucu  : 1367646464804655104
+//  Kanal   : 1497713387604545768
+//  Roblox Grup ID : 35431216
+//  Verilecek Roblox Grup Rolü: Rank 2
+//  Cookie  : Mevcut ROBLOX_COOKIE env değişkeni kullanılır
+// ============================================================
+
+const KAYIT_GUILD_ID        = '1367646464804655104';
+const KAYIT_KANAL_ID        = '1497713387604545768';
+const KAYIT_GRUP_ID         = 35431216;
+const KAYIT_RANK_ID         = 2;
+const KAYIT_DISCORD_ROL_ID  = '1497719909025714346'; // Kayıt sonrası verilecek Discord rolü
+
+// Cooldown — aynı Discord kullanıcısı tekrar tekrar denemesin
+// { discordUserId: timestamp }
+const kayitCooldown = new Map();
+const KAYIT_COOLDOWN_MS = 30 * 1000; // 30 saniye
+
+// ============================================================
+//  YARDIMCI: Grup rol cache — KAYIT_GRUP_ID için ayrı cache
+// ============================================================
+let kayitGrupRolCache = null;
+
+async function kayitGetirGrupRolleri() {
+    if (kayitGrupRolCache) return kayitGrupRolCache;
+    try {
+        const res = await fetch(`https://groups.roblox.com/v1/groups/${KAYIT_GRUP_ID}/roles`, {
+            headers: { 'Cookie': `.ROBLOSECURITY=${ROBLOX_COOKIE}` }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        kayitGrupRolCache = data.roles || [];
+        console.log(`[✅ KAYIT] ${KAYIT_GRUP_ID} grubu için ${kayitGrupRolCache.length} rol yüklendi.`);
+        return kayitGrupRolCache;
+    } catch (err) {
+        console.error('[❌ KAYIT] Grup rolleri alınamadı:', err.message);
+        return [];
+    }
+}
+
+async function kayitGetirRoleId(rankNumber) {
+    const roller = await kayitGetirGrupRolleri();
+    const rol    = roller.find(r => r.rank === rankNumber);
+    return rol ? rol.id : null;
+}
+
+// ============================================================
+//  YARDIMCI: Kullanıcı grupta mı?
+// ============================================================
+async function kayitGruptaMi(robloxUserId) {
+    try {
+        const res  = await fetch(`https://groups.roblox.com/v1/users/${robloxUserId}/groups/roles`);
+        const data = await res.json();
+        if (data?.data) {
+            return data.data.some(g => g.group.id === KAYIT_GRUP_ID);
+        }
+        return false;
+    } catch {
+        return false;
+    }
+}
+
+// ============================================================
+//  YARDIMCI: Roblox kullanıcı adından ID al
+// ============================================================
+async function kayitGetirRobloxKullanici(username) {
+    try {
+        const res  = await fetch('https://users.roblox.com/v1/usernames/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usernames: [username], excludeBannedUsers: false })
+        });
+        const data = await res.json();
+        return data?.data?.[0] || null;
+    } catch {
+        return null;
+    }
+}
+
+// ============================================================
+//  YARDIMCI: Gruba rank ata (mevcut setRobloxRank ile aynı mantık)
+// ============================================================
+async function kayitAtaRank(robloxUserId) {
+    // 1. Rank 2'nin gerçek roleId'sini bul
+    const roleId = await kayitGetirRoleId(KAYIT_RANK_ID);
+    if (!roleId) throw new Error(`Rank ${KAYIT_RANK_ID} için roleId bulunamadı.`);
+
+    // 2. CSRF token al
+    const csrfRes   = await fetch('https://auth.roblox.com/v2/logout', {
+        method: 'POST',
+        headers: {
+            'Cookie': `.ROBLOSECURITY=${ROBLOX_COOKIE}`,
+            'Content-Length': '0'
+        }
+    });
+    const csrfToken = csrfRes.headers.get('x-csrf-token');
+    if (!csrfToken) throw new Error('CSRF token alınamadı.');
+
+    // 3. Rolü ata
+    const patchRes = await fetch(`https://groups.roblox.com/v1/groups/${KAYIT_GRUP_ID}/users/${robloxUserId}`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type':  'application/json',
+            'Cookie':        `.ROBLOSECURITY=${ROBLOX_COOKIE}`,
+            'x-csrf-token':  csrfToken
+        },
+        body: JSON.stringify({ roleId })
+    });
+
+    if (!patchRes.ok) {
+        const hata = await patchRes.text().catch(() => 'Bilinmeyen hata');
+        throw new Error(`Roblox API: ${patchRes.status} — ${hata}`);
+    }
+    return true;
+}
+
+// ============================================================
+//  YARDIMCI: Kullanıcının mevcut grubundaki rank bilgisi
+// ============================================================
+async function kayitGetirMevcutRank(robloxUserId) {
+    try {
+        const res  = await fetch(`https://groups.roblox.com/v1/users/${robloxUserId}/groups/roles`);
+        const data = await res.json();
+        if (data?.data) {
+            const grup = data.data.find(g => g.group.id === KAYIT_GRUP_ID);
+            if (grup) return { rank: grup.role.rank, name: grup.role.name };
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+// ============================================================
+//  YARDIMCI: Embed oluştur — başarılı kayıt
+// ============================================================
+function kayitBasariliEmbed(robloxUser, mevcutRank, hedefRank, discordUser) {
+    return new EmbedBuilder()
+        .setColor('#00FF88')
+        .setTitle('✅ Kayıt Başarılı!')
+        .setDescription(`**${robloxUser.name}** gruba başarıyla kaydedildi.`)
+        .addFields(
+            { name: '👤 Roblox Kullanıcı', value: `[${robloxUser.name}](https://www.roblox.com/users/${robloxUser.id}/profile)`, inline: true },
+            { name: '🆔 Roblox ID', value: String(robloxUser.id), inline: true },
+            { name: '📊 Eski Rank', value: mevcutRank ? `${mevcutRank.name} (${mevcutRank.rank})` : 'Bilinmiyor', inline: true },
+            { name: '🆙 Yeni Rank', value: `Rank ${hedefRank}`, inline: true },
+            { name: '🔗 Grup', value: `[EkoYıldız](https://www.roblox.com/communities/${KAYIT_GRUP_ID})`, inline: true },
+            { name: '💬 Discord', value: discordUser.tag, inline: true }
+        )
+        .setTimestamp()
+        .setFooter({ text: 'Eko Yıldız Kayıt Sistemi' });
+}
+
+function kayitHataEmbed(baslik, aciklama) {
+    return new EmbedBuilder()
+        .setColor('#FF4444')
+        .setTitle(`❌ ${baslik}`)
+        .setDescription(aciklama)
+        .setTimestamp()
+        .setFooter({ text: 'Eko Yıldız Kayıt Sistemi' });
+}
+
+function kayitBilgiEmbed(baslik, aciklama, renk = '#FFA500') {
+    return new EmbedBuilder()
+        .setColor(renk)
+        .setTitle(`ℹ️ ${baslik}`)
+        .setDescription(aciklama)
+        .setTimestamp()
+        .setFooter({ text: 'Eko Yıldız Kayıt Sistemi' });
+}
+
+// ============================================================
+//  MESSAGE CREATE — Kayıt Kanalı Dinleyicisi
+// ============================================================
+client.on('messageCreate', async message => {
+
+    // Bot mesajlarını yoksay
+    if (message.author.bot) return;
+
+    // Sadece hedef sunucu ve kayıt kanalı
+    if (message.guildId  !== KAYIT_GUILD_ID) return;
+    if (message.channelId !== KAYIT_KANAL_ID) return;
+
+    const icerik = message.content.trim();
+
+    // Boş veya komut gibi mesajları yoksay
+    if (!icerik || icerik.startsWith('/')) return;
+
+    // Roblox kullanıcı adı formatı kontrolü (3-20 karakter, harf/rakam/alt çizgi)
+    const kullaniciAdiRegex = /^[a-zA-Z0-9_]{3,20}$/;
+    if (!kullaniciAdiRegex.test(icerik)) {
+        const hataMsg = await message.reply({
+            embeds: [kayitHataEmbed(
+                'Geçersiz Kullanıcı Adı',
+                `\`${icerik}\` geçerli bir Roblox kullanıcı adı değil.\n\n📌 Roblox kullanıcı adları **3-20 karakter** arasında olmalı ve sadece **harf, rakam veya alt çizgi (_)** içermelidir.`
+            )],
+            ephemeral: false
+        });
+        setTimeout(() => hataMsg.delete().catch(() => {}), 10000);
+        await message.delete().catch(() => {});
+        return;
+    }
+
+    // Cooldown kontrolü
+    const sonIstek = kayitCooldown.get(message.author.id);
+    if (sonIstek && Date.now() - sonIstek < KAYIT_COOLDOWN_MS) {
+        const kalanSaniye = Math.ceil((KAYIT_COOLDOWN_MS - (Date.now() - sonIstek)) / 1000);
+        const coolMsg = await message.reply({
+            embeds: [kayitBilgiEmbed(
+                'Lütfen Bekleyin',
+                `Çok hızlı deniyorsunuz! **${kalanSaniye} saniye** sonra tekrar deneyin.`,
+                '#FFA500'
+            )]
+        });
+        setTimeout(() => coolMsg.delete().catch(() => {}), 8000);
+        await message.delete().catch(() => {});
+        return;
+    }
+
+    // Cooldown başlat
+    kayitCooldown.set(message.author.id, Date.now());
+    setTimeout(() => kayitCooldown.delete(message.author.id), KAYIT_COOLDOWN_MS);
+
+    // Mesajı sil (kanalı temiz tut)
+    await message.delete().catch(() => {});
+
+    // Yükleniyor mesajı
+    const yukleniyor = await message.channel.send({
+        embeds: [kayitBilgiEmbed(
+            'Kontrol Ediliyor...',
+            `⏳ **${icerik}** kullanıcısı Roblox'ta aranıyor, lütfen bekleyin...`,
+            '#0099FF'
+        )]
+    });
+
+    try {
+        // 1. Roblox kullanıcısını bul
+        const robloxUser = await kayitGetirRobloxKullanici(icerik);
+        if (!robloxUser) {
+            await yukleniyor.edit({
+                embeds: [kayitHataEmbed(
+                    'Kullanıcı Bulunamadı',
+                    `**${icerik}** adında bir Roblox kullanıcısı bulunamadı.\n\n📌 Kullanıcı adını doğru yazdığınızdan emin olun.`
+                )]
+            });
+            setTimeout(() => yukleniyor.delete().catch(() => {}), 15000);
+            return;
+        }
+
+        // 2. Grupta mı kontrol et
+        await yukleniyor.edit({
+            embeds: [kayitBilgiEmbed(
+                'Grup Kontrolü...',
+                `⏳ **${robloxUser.name}** kullanıcısı EkoYıldız grubunda kontrol ediliyor...`,
+                '#0099FF'
+            )]
+        });
+
+        const gruptaMi = await kayitGruptaMi(robloxUser.id);
+        if (!gruptaMi) {
+            await yukleniyor.edit({
+                embeds: [kayitHataEmbed(
+                    'Grupta Değil',
+                    `**${robloxUser.name}** kullanıcısı [EkoYıldız](https://www.roblox.com/communities/${KAYIT_GRUP_ID}) grubunda **bulunmuyor**.\n\n📌 Önce gruba katılın, ardından tekrar deneyin.\n🔗 [Gruba Katıl](https://www.roblox.com/communities/${KAYIT_GRUP_ID})`
+                )]
+            });
+            setTimeout(() => yukleniyor.delete().catch(() => {}), 20000);
+
+            // Log kanalına bildir
+            const logEmbed = new EmbedBuilder()
+                .setColor('#FF4444')
+                .setTitle('❌ Kayıt Başarısız — Grupta Değil')
+                .addFields(
+                    { name: '👤 Roblox', value: `${robloxUser.name} (${robloxUser.id})`, inline: true },
+                    { name: '💬 Discord', value: `${message.author.tag} (${message.author.id})`, inline: true },
+                    { name: '📋 Sebep', value: 'Grupta üye değil', inline: true }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'Eko Yıldız Kayıt Sistemi' });
+            await sendLog(client, logEmbed);
+            return;
+        }
+
+        // 3. Mevcut rankı al
+        const mevcutRank = await kayitGetirMevcutRank(robloxUser.id);
+
+        // 4. Rank 2 veya üstündeyse → Roblox rank ATMA, sadece Discord rolü ver
+        if (mevcutRank && mevcutRank.rank >= KAYIT_RANK_ID) {
+            // Roblox'ta rank değiştirme — ama Discord rolünü yine ver
+            let dRolVerildi = false;
+            try {
+                const guild  = client.guilds.cache.get(KAYIT_GUILD_ID);
+                const member = await guild.members.fetch(message.author.id).catch(() => null);
+                const dRol   = guild?.roles.cache.get(KAYIT_DISCORD_ROL_ID);
+                if (member && dRol && !member.roles.cache.has(KAYIT_DISCORD_ROL_ID)) {
+                    await member.roles.add(dRol, 'Eko Yıldız Kayıt — üst rütbeli doğrulama');
+                    dRolVerildi = true;
+                }
+            } catch {}
+
+            const aciklama = mevcutRank.rank > KAYIT_RANK_ID
+                ? `Roblox rütbeniz (Rank ${mevcutRank.rank} — **${mevcutRank.name}**) zaten Rank ${KAYIT_RANK_ID}'den yüksek olduğu için Roblox'ta herhangi bir değişiklik yapılmadı.`
+                : `Zaten **${mevcutRank.name}** (Rank ${mevcutRank.rank}) rütbesine sahipsiniz.`;
+
+            await yukleniyor.edit({
+                embeds: [new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setTitle('⭐ Zaten Kayıtlı')
+                    .setDescription(aciklama)
+                    .addFields(
+                        { name: '👤 Roblox', value: `[${robloxUser.name}](https://www.roblox.com/users/${robloxUser.id}/profile)`, inline: true },
+                        { name: '📊 Mevcut Rank', value: `${mevcutRank.name} (${mevcutRank.rank})`, inline: true },
+                        { name: '🎭 Discord Rolü', value: dRolVerildi ? `✅ <@&${KAYIT_DISCORD_ROL_ID}> verildi` : '✅ Zaten mevcut', inline: true }
+                    )
+                    .setTimestamp()
+                    .setFooter({ text: 'Eko Yıldız Kayıt Sistemi' })
+                ]
+            });
+            setTimeout(() => yukleniyor.delete().catch(() => {}), 15000);
+            return;
+        }
+
+        // 5. Rank ata (sadece rank 2'den düşükse — Guest/rank 1 vb.)
+        await yukleniyor.edit({
+            embeds: [kayitBilgiEmbed(
+                'Rank Atanıyor...',
+                `⏳ **${robloxUser.name}** kullanıcısına Rank ${KAYIT_RANK_ID} atanıyor...`,
+                '#0099FF'
+            )]
+        });
+
+        await kayitAtaRank(robloxUser.id);
+
+        // 6. Discord rolü ver
+        let discordRolVerildi = false;
+        try {
+            const guild  = client.guilds.cache.get(KAYIT_GUILD_ID);
+            const member = await guild.members.fetch(message.author.id).catch(() => null);
+            const dRol   = guild?.roles.cache.get(KAYIT_DISCORD_ROL_ID);
+
+            if (member && dRol) {
+                if (!member.roles.cache.has(KAYIT_DISCORD_ROL_ID)) {
+                    await member.roles.add(dRol, 'Eko Yıldız Kayıt — Roblox grup doğrulaması');
+                }
+                discordRolVerildi = true;
+            }
+        } catch (rolErr) {
+            console.error('[❌ KAYIT] Discord rol verilemedi:', rolErr.message);
+        }
+
+        // 7. Başarı mesajı
+        const basariliEmbed = kayitBasariliEmbed(robloxUser, mevcutRank, KAYIT_RANK_ID, message.author);
+        if (discordRolVerildi) {
+            basariliEmbed.addFields({ name: '🎭 Discord Rolü', value: `<@&${KAYIT_DISCORD_ROL_ID}> verildi`, inline: true });
+        }
+        await yukleniyor.edit({ embeds: [basariliEmbed] });
+        setTimeout(() => yukleniyor.delete().catch(() => {}), 30000);
+
+        // 8. Log kanalına başarı bildirimi
+        const logEmbed = new EmbedBuilder()
+            .setColor('#00FF88')
+            .setTitle('✅ Eko Yıldız — Başarılı Kayıt')
+            .addFields(
+                { name: '👤 Roblox', value: `${robloxUser.name} (${robloxUser.id})`, inline: true },
+                { name: '💬 Discord', value: `${message.author.tag} (${message.author.id})`, inline: true },
+                { name: '📊 Eski Rank', value: mevcutRank ? `${mevcutRank.name} (${mevcutRank.rank})` : 'Bilinmiyor', inline: true },
+                { name: '🆙 Yeni Roblox Rank', value: `Rank ${KAYIT_RANK_ID}`, inline: true },
+                { name: '🎭 Discord Rolü', value: discordRolVerildi ? `✅ <@&${KAYIT_DISCORD_ROL_ID}>` : '❌ Verilemedi', inline: true }
+            )
+            .setTimestamp()
+            .setFooter({ text: 'Eko Yıldız Kayıt Sistemi' });
+        await sendLog(client, logEmbed);
+
+        console.log(`[⭐ KAYIT] ${robloxUser.name} (${robloxUser.id}) → Rank ${KAYIT_RANK_ID} | Discord Rol: ${discordRolVerildi} | ${message.author.tag}`);
+
+    } catch (err) {
+        console.error('[❌ KAYIT] Hata:', err.message);
+        await yukleniyor.edit({
+            embeds: [kayitHataEmbed(
+                'Sistem Hatası',
+                `Bir hata oluştu: \`${err.message}\`\n\nLütfen bir yetkiliyle iletişime geçin.`
+            )]
+        });
+        setTimeout(() => yukleniyor.delete().catch(() => {}), 20000);
+    }
+});
 
 // ============================================================
 //  BAŞLATMA
