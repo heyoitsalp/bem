@@ -14,37 +14,47 @@ const ROBLOX_GROUP_ID = 8505535;
 const ROMANAGER_API_KEY = "0d268477-793e-4b83-8edc-b936a922c866";
 
 // ============================================================
-//  RÜTBE HİYERARŞİSİ (28 Rütbe)
+//  RÜTBE LİSTESİ — Grup ID: 8505535 (Guest hariç tümü)
 // ============================================================
 const rankList = [
-    { name: "Akademi Adayı",                    id: 1  },
-    { name: "Akademi",                           id: 3  },
-    { name: "Polis Memuru Adayı",                id: 6  },
-    { name: "Polis Memuru",                      id: 7  },
-    { name: "Kıdemli Polis Memuru",              id: 8  },
-    { name: "Başpolis Memuru Adayı",             id: 9  },
-    { name: "Başpolis Memuru",                   id: 10 },
-    { name: "Kıdemli Başpolis Memuru",           id: 11 },
-    { name: "Uzm. Başpolis Memuru",              id: 12 },
-    { name: "Aday Komiser",                      id: 13 },
-    { name: "Stajyer Komiser",                   id: 15 },
-    { name: "Komiser Yardımcısı",                id: 16 },
-    { name: "Askomiser",                         id: 17 },
-    { name: "Komiser",                           id: 18 },
-    { name: "Üskomiser",                         id: 19 },
-    { name: "Başkomiser",                        id: 20 },
-    { name: "Amir Adayı",                        id: 21 },
-    { name: "Emniyet Amiri",                     id: 22 },
-    { name: "Müdür",                             id: 23 },
-    { name: "4. Sınıf Emniyet Müdürü",           id: 24 },
-    { name: "3. Sınıf Emniyet Müdürü",           id: 25 },
-    { name: "2. Sınıf Emniyet Müdürü",           id: 26 },
-    { name: "1. Sınıf Emniyet Müdürü",           id: 27 },
-    { name: "Emniyet Genel Müdürü",              id: 28 },
-    { name: "Teftiş Kurulu",                     id: 29 },
-    { name: "Teftiş Kurulu Başkan Yardımcısı",   id: 30 },
-    { name: "Teftiş Kurulu Başkanı",             id: 31 },
-    { name: "Yüksek Polis Kurulu",               id: 32 }
+    { name: "Polis",                              id: 1   },
+    { name: "Akademi Adayı",                      id: 2   },
+    { name: "Akademi",                            id: 3   },
+    { name: "Polis Memuru Adayı",                 id: 6   },
+    { name: "Polis Memuru",                       id: 7   },
+    { name: "Kıdemli Polis Memuru",               id: 8   },
+    { name: "Başpolis Memuru Adayı",              id: 9   },
+    { name: "Başpolis Memuru",                    id: 10  },
+    { name: "Kıdemli Başpolis Memuru",            id: 11  },
+    { name: "Uzm. Başpolis Memuru",               id: 12  },
+    { name: "Aday Komiser",                       id: 13  },
+    { name: "Emekli Personel",                    id: 14  },
+    { name: "Stajyer Komiser",                    id: 15  },
+    { name: "Komiser Yardımcısı",                 id: 16  },
+    { name: "Askomiser",                          id: 17  },
+    { name: "Komiser",                            id: 18  },
+    { name: "Üskomiser",                          id: 19  },
+    { name: "Başkomiser",                         id: 20  },
+    { name: "Amir Adayı",                         id: 21  },
+    { name: "Emniyet Amiri",                      id: 22  },
+    { name: "Müdür",                              id: 23  },
+    { name: "4. Sınıf Emniyet Müdürü",            id: 24  },
+    { name: "3. Sınıf Emniyet Müdürü",            id: 25  },
+    { name: "2. Sınıf Emniyet Müdürü",            id: 26  },
+    { name: "1. Sınıf Emniyet Müdürü",            id: 27  },
+    { name: "Emniyet Genel Müdürü",               id: 28  },
+    { name: "Teftiş Kurulu",                      id: 29  },
+    { name: "Teftiş Kurulu Başkan Yardımcısı",    id: 30  },
+    { name: "Teftiş Kurulu Başkanı",              id: 31  },
+    { name: "Yüksek Polis Kurulu",                id: 32  },
+    { name: "Yönetim Kurulu",                     id: 33  },
+    { name: "Yönetim Kurulu Başkan Yardımcısı",   id: 34  },
+    { name: "Yönetim Kurulu Başkanı",             id: 36  },
+    { name: "Contributor",                        id: 37  },
+    { name: "Geliştirme Ekibi",                   id: 250 },
+    { name: "Vali",                               id: 252 },
+    { name: "Cumhurbaşkanı",                      id: 254 },
+    { name: "Proje Uygulaması",                   id: 255 }
 ];
 
 // ============================================================
@@ -518,6 +528,7 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 client.once('ready', () => {
     console.log(`[🤖] ${client.user.tag} olarak giriş yapıldı!`);
     console.log(`[📊] ${client.guilds.cache.size} sunucuda aktif.`);
+    console.log(`[📋] ${rankList.length} rütbe yüklendi.`);
     client.user.setActivity('Bursa Emniyet Müdürlüğü | /yardim', { type: 4 });
 
     // Geçici ban/mute kontrolü - her dakika çalışır
