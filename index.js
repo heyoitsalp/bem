@@ -697,13 +697,13 @@ client.on('interactionCreate', async interaction => {
 
     // Sunucu kontrolü
     if (interaction.guildId !== config.GUILD_ID) {
-        return interaction.reply({ content: '❌ Bu komut sadece ana sunucumuzda kullanılabilir.', ephemeral: true });
+        return interaction.reply({ content: '❌ Bu komut sadece ana sunucumuzda kullanılabilir.', flags: 64 });
     }
 
     // Yetki kontrolü
     const hasRole = interaction.member.roles.cache.has(config.REQUIRED_ROLE_ID);
     if (!hasRole) {
-        return interaction.reply({ content: '❌ Bu komutu kullanmak için **Yetkili** rolüne sahip olmanız gerekiyor!', ephemeral: true });
+        return interaction.reply({ content: '❌ Bu komutu kullanmak için **Yetkili** rolüne sahip olmanız gerekiyor!', flags: 64 });
     }
 
     const { commandName } = interaction;
@@ -828,7 +828,7 @@ client.on('interactionCreate', async interaction => {
 
         if (member) {
             if (!member.bannable) {
-                return interaction.reply({ content: '❌ Bu kullanıcıyı banlayamam! (Yetkim yetersiz veya üst rol)', ephemeral: true });
+                return interaction.reply({ content: '❌ Bu kullanıcıyı banlayamam! (Yetkim yetersiz veya üst rol)', flags: 64 });
             }
         }
 
@@ -840,7 +840,7 @@ client.on('interactionCreate', async interaction => {
         const dmSent = await sendDM(user, dmEmbed);
 
         try {
-            await interaction.guild.bans.create(user.id, { reason: `[#${caseId}] ${reason} | Yetkili: ${interaction.user.tag}`, deleteMessageDays: Math.min(Math.max(deletedays, 0), 7) });
+            await interaction.guild.bans.create(user.id, { reason: `[#${caseId}] ${reason} | Yetkili: ${interaction.user.tag}`, deleteMessageSeconds: Math.min(Math.max(deletedays, 0), 7) * 86400 });
 
             const embed = buildModEmbed(
                 `🔨 Kullanıcı Banlandı | Vaka #${caseId}`,
@@ -855,7 +855,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ embeds: [embed] });
             await sendLog(client, embed);
         } catch (error) {
-            await interaction.reply({ content: `❌ Banlama işlemi başarısız: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Banlama işlemi başarısız: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -867,12 +867,12 @@ client.on('interactionCreate', async interaction => {
         const durationMs = parseDuration(sureStr);
 
         if (!durationMs) {
-            return interaction.reply({ content: '❌ Geçersiz süre formatı! Örnek: `10m`, `2h`, `1d`', ephemeral: true });
+            return interaction.reply({ content: '❌ Geçersiz süre formatı! Örnek: `10m`, `2h`, `1d`', flags: 64 });
         }
 
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
         if (member && !member.bannable) {
-            return interaction.reply({ content: '❌ Bu kullanıcıyı banlayamam!', ephemeral: true });
+            return interaction.reply({ content: '❌ Bu kullanıcıyı banlayamam!', flags: 64 });
         }
 
         const expiresAt = Date.now() + durationMs;
@@ -886,7 +886,7 @@ client.on('interactionCreate', async interaction => {
         const dmSent = await sendDM(user, dmEmbed);
 
         try {
-            await interaction.guild.bans.create(user.id, { reason: `[TEMPBAN #${caseId}] ${reason} | Yetkili: ${interaction.user.tag}`, deleteMessageDays: 1 });
+            await interaction.guild.bans.create(user.id, { reason: `[TEMPBAN #${caseId}] ${reason} | Yetkili: ${interaction.user.tag}`, deleteMessageSeconds: 86400 });
 
             const embed = buildModEmbed(
                 `⏳ Geçici Ban | Vaka #${caseId}`,
@@ -904,7 +904,7 @@ client.on('interactionCreate', async interaction => {
             await sendLog(client, embed);
         } catch (error) {
             tempbanDatabase.delete(user.id);
-            await interaction.reply({ content: `❌ Geçici banlama işlemi başarısız: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Geçici banlama işlemi başarısız: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -916,7 +916,7 @@ client.on('interactionCreate', async interaction => {
         try {
             const bannedUser = await interaction.guild.bans.fetch(userId).catch(() => null);
             if (!bannedUser) {
-                return interaction.reply({ content: '❌ Bu kullanıcı zaten banlı değil veya ID geçersiz!', ephemeral: true });
+                return interaction.reply({ content: '❌ Bu kullanıcı zaten banlı değil veya ID geçersiz!', flags: 64 });
             }
 
             await interaction.guild.bans.remove(userId, `${reason} | Yetkili: ${interaction.user.tag}`);
@@ -941,7 +941,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ embeds: [embed] });
             await sendLog(client, embed);
         } catch (error) {
-            await interaction.reply({ content: `❌ Unban işlemi başarısız: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Unban işlemi başarısız: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -951,8 +951,8 @@ client.on('interactionCreate', async interaction => {
         const reason = interaction.options.getString('sebep');
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', ephemeral: true });
-        if (!member.kickable) return interaction.reply({ content: '❌ Bu kullanıcıyı atamam! (Yetki yetersiz)', ephemeral: true });
+        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', flags: 64 });
+        if (!member.kickable) return interaction.reply({ content: '❌ Bu kullanıcıyı atamam! (Yetki yetersiz)', flags: 64 });
 
         const caseId = addModCase('KICK', user.id, interaction.user.id, reason);
 
@@ -977,7 +977,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ embeds: [embed] });
             await sendLog(client, embed);
         } catch (error) {
-            await interaction.reply({ content: `❌ Atma işlemi başarısız: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Atma işlemi başarısız: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -987,13 +987,13 @@ client.on('interactionCreate', async interaction => {
         const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', ephemeral: true });
+        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', flags: 64 });
 
         const muteRole = interaction.guild.roles.cache.get(config.MUTE_ROLE_ID);
-        if (!muteRole) return interaction.reply({ content: '❌ Susturulmuş rolü bulunamadı! Config\'i kontrol edin.', ephemeral: true });
+        if (!muteRole) return interaction.reply({ content: '❌ Susturulmuş rolü bulunamadı! Config\'i kontrol edin.', flags: 64 });
 
         if (member.roles.cache.has(muteRole.id)) {
-            return interaction.reply({ content: '❌ Bu kullanıcı zaten susturulmuş!', ephemeral: true });
+            return interaction.reply({ content: '❌ Bu kullanıcı zaten susturulmuş!', flags: 64 });
         }
 
         const caseId = addModCase('MUTE', user.id, interaction.user.id, reason);
@@ -1019,7 +1019,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ embeds: [embed] });
             await sendLog(client, embed);
         } catch (error) {
-            await interaction.reply({ content: `❌ Susturma işlemi başarısız: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Susturma işlemi başarısız: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -1031,14 +1031,14 @@ client.on('interactionCreate', async interaction => {
         const durationMs = parseDuration(sureStr);
 
         if (!durationMs) {
-            return interaction.reply({ content: '❌ Geçersiz süre formatı! Örnek: `10m`, `2h`, `1d`', ephemeral: true });
+            return interaction.reply({ content: '❌ Geçersiz süre formatı! Örnek: `10m`, `2h`, `1d`', flags: 64 });
         }
 
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', ephemeral: true });
+        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', flags: 64 });
 
         const muteRole = interaction.guild.roles.cache.get(config.MUTE_ROLE_ID);
-        if (!muteRole) return interaction.reply({ content: '❌ Susturulmuş rolü bulunamadı!', ephemeral: true });
+        if (!muteRole) return interaction.reply({ content: '❌ Susturulmuş rolü bulunamadı!', flags: 64 });
 
         const expiresAt = Date.now() + durationMs;
         const durationText = formatDuration(durationMs);
@@ -1069,7 +1069,7 @@ client.on('interactionCreate', async interaction => {
             await sendLog(client, embed);
         } catch (error) {
             tempmuteDatabase.delete(user.id);
-            await interaction.reply({ content: `❌ Geçici susturma başarısız: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Geçici susturma başarısız: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -1079,13 +1079,13 @@ client.on('interactionCreate', async interaction => {
         const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', ephemeral: true });
+        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', flags: 64 });
 
         const muteRole = interaction.guild.roles.cache.get(config.MUTE_ROLE_ID);
-        if (!muteRole) return interaction.reply({ content: '❌ Susturulmuş rolü bulunamadı!', ephemeral: true });
+        if (!muteRole) return interaction.reply({ content: '❌ Susturulmuş rolü bulunamadı!', flags: 64 });
 
         if (!member.roles.cache.has(muteRole.id)) {
-            return interaction.reply({ content: '❌ Bu kullanıcı zaten susturulmuş değil!', ephemeral: true });
+            return interaction.reply({ content: '❌ Bu kullanıcı zaten susturulmuş değil!', flags: 64 });
         }
 
         tempmuteDatabase.delete(user.id);
@@ -1112,7 +1112,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ embeds: [embed] });
             await sendLog(client, embed);
         } catch (error) {
-            await interaction.reply({ content: `❌ Unmute işlemi başarısız: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Unmute işlemi başarısız: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -1122,7 +1122,7 @@ client.on('interactionCreate', async interaction => {
         const reason = interaction.options.getString('sebep');
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', ephemeral: true });
+        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', flags: 64 });
 
         const warnCount = addWarning(user.id, reason, interaction.user.id);
         const caseId = addModCase('WARN', user.id, interaction.user.id, reason);
@@ -1153,7 +1153,7 @@ client.on('interactionCreate', async interaction => {
         const warns = getUserWarnings(user.id);
 
         if (warns.length === 0) {
-            return interaction.reply({ content: `✅ **${user.tag}** adlı kullanıcının hiç uyarısı yok.`, ephemeral: true });
+            return interaction.reply({ content: `✅ **${user.tag}** adlı kullanıcının hiç uyarısı yok.`, flags: 64 });
         }
 
         const warnFields = warns.slice(0, 25).map((w, i) => ({
@@ -1171,7 +1171,7 @@ client.on('interactionCreate', async interaction => {
             .setTimestamp()
             .setFooter({ text: 'Sentura 🦸 ekoyildiz' });
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.reply({ embeds: [embed], flags: 64 });
         return;
     }
 
@@ -1181,11 +1181,11 @@ client.on('interactionCreate', async interaction => {
         const warns = getUserWarnings(user.id);
 
         if (warns.length === 0) {
-            return interaction.reply({ content: `❌ **${user.tag}** adlı kullanıcının uyarısı yok.`, ephemeral: true });
+            return interaction.reply({ content: `❌ **${user.tag}** adlı kullanıcının uyarısı yok.`, flags: 64 });
         }
 
         if (index < 0 || index >= warns.length) {
-            return interaction.reply({ content: `❌ Geçersiz uyarı numarası! (1 ile ${warns.length} arasında olmalı)`, ephemeral: true });
+            return interaction.reply({ content: `❌ Geçersiz uyarı numarası! (1 ile ${warns.length} arasında olmalı)`, flags: 64 });
         }
 
         const removedWarn = warns[index];
@@ -1210,7 +1210,7 @@ client.on('interactionCreate', async interaction => {
         const userCases = [...modlogDatabase.values()].filter(c => c.userId === user.id);
 
         if (userCases.length === 0) {
-            return interaction.reply({ content: `✅ **${user.tag}** adlı kullanıcının moderasyon geçmişi temiz.`, ephemeral: true });
+            return interaction.reply({ content: `✅ **${user.tag}** adlı kullanıcının moderasyon geçmişi temiz.`, flags: 64 });
         }
 
         const typeEmoji = { BAN: '🔨', TEMPBAN: '⏳', UNBAN: '✅', KICK: '👢', MUTE: '🔇', TEMPMUTE: '⏰', UNMUTE: '🔊', WARN: '⚠️' };
@@ -1229,7 +1229,7 @@ client.on('interactionCreate', async interaction => {
             .setTimestamp()
             .setFooter({ text: 'Sentura 🦸 ekoyildiz' });
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.reply({ embeds: [embed], flags: 64 });
         return;
     }
 
@@ -1238,10 +1238,10 @@ client.on('interactionCreate', async interaction => {
         const targetUser = interaction.options.getUser('kullanici');
 
         if (sayi < 1 || sayi > 100) {
-            return interaction.reply({ content: '❌ Silinecek mesaj sayısı 1-100 arasında olmalıdır!', ephemeral: true });
+            return interaction.reply({ content: '❌ Silinecek mesaj sayısı 1-100 arasında olmalıdır!', flags: 64 });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
 
         try {
             let messages = await interaction.channel.messages.fetch({ limit: sayi });
@@ -1273,7 +1273,7 @@ client.on('interactionCreate', async interaction => {
         const kanal = interaction.options.getChannel('kanal') || interaction.channel;
 
         if (saniye < 0 || saniye > 21600) {
-            return interaction.reply({ content: '❌ Yavaş mod süresi 0-21600 saniye arasında olmalıdır!', ephemeral: true });
+            return interaction.reply({ content: '❌ Yavaş mod süresi 0-21600 saniye arasında olmalıdır!', flags: 64 });
         }
 
         try {
@@ -1284,7 +1284,7 @@ client.on('interactionCreate', async interaction => {
                     : `✅ <#${kanal.id}> kanalında yavaş mod **${saniye} saniye** olarak ayarlandı.`
             });
         } catch (error) {
-            await interaction.reply({ content: `❌ Slowmode ayarlanamadı: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Slowmode ayarlanamadı: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -1308,7 +1308,7 @@ client.on('interactionCreate', async interaction => {
             await kanal.send({ embeds: [embed] });
             await sendLog(client, embed);
         } catch (error) {
-            await interaction.reply({ content: `❌ Kanal kilitlenemedi: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Kanal kilitlenemedi: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -1330,7 +1330,7 @@ client.on('interactionCreate', async interaction => {
             await kanal.send({ embeds: [embed] });
             await sendLog(client, embed);
         } catch (error) {
-            await interaction.reply({ content: `❌ Kilit açılamadı: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Kilit açılamadı: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -1609,7 +1609,7 @@ client.on('interactionCreate', async interaction => {
 
         try {
             await kanal.send({ embeds: [embed] });
-            await interaction.reply({ content: `✅ Duyuru <#${kanal.id}> kanalına başarıyla gönderildi!`, ephemeral: true });
+            await interaction.reply({ content: `✅ Duyuru <#${kanal.id}> kanalına başarıyla gönderildi!`, flags: 64 });
             const logEmbed = buildModEmbed(
                 '📢 Duyuru Gönderildi',
                 '#0099FF',
@@ -1621,7 +1621,7 @@ client.on('interactionCreate', async interaction => {
             );
             await sendLog(client, logEmbed);
         } catch (error) {
-            await interaction.reply({ content: `❌ Duyuru gönderilemedi: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Duyuru gönderilemedi: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -1640,9 +1640,9 @@ client.on('interactionCreate', async interaction => {
 
         const sent = await sendDM(user, embed);
         if (sent) {
-            await interaction.reply({ content: `✅ **${user.tag}** kullanıcısına DM başarıyla gönderildi.`, ephemeral: true });
+            await interaction.reply({ content: `✅ **${user.tag}** kullanıcısına DM başarıyla gönderildi.`, flags: 64 });
         } else {
-            await interaction.reply({ content: `❌ **${user.tag}** kullanıcısına DM gönderilemedi (DM kapalı olabilir).`, ephemeral: true });
+            await interaction.reply({ content: `❌ **${user.tag}** kullanıcısına DM gönderilemedi (DM kapalı olabilir).`, flags: 64 });
         }
         return;
     }
@@ -1651,7 +1651,7 @@ client.on('interactionCreate', async interaction => {
         const rol = interaction.options.getRole('rol');
         const mesaj = interaction.options.getString('mesaj');
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: 64 });
         await interaction.guild.members.fetch();
 
         const members = interaction.guild.members.cache.filter(m =>
@@ -1694,9 +1694,9 @@ client.on('interactionCreate', async interaction => {
         const rol = interaction.options.getRole('rol');
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', ephemeral: true });
+        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', flags: 64 });
         if (member.roles.cache.has(rol.id)) {
-            return interaction.reply({ content: `❌ **${user.tag}** zaten **${rol.name}** rolüne sahip!`, ephemeral: true });
+            return interaction.reply({ content: `❌ **${user.tag}** zaten **${rol.name}** rolüne sahip!`, flags: 64 });
         }
 
         try {
@@ -1705,7 +1705,7 @@ client.on('interactionCreate', async interaction => {
             await sendDM(user, dmEmbed);
             await interaction.reply(`✅ **${user.tag}** kullanıcısına **${rol.name}** rolü verildi.`);
         } catch (error) {
-            await interaction.reply({ content: `❌ Rol verilemedi: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Rol verilemedi: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -1715,9 +1715,9 @@ client.on('interactionCreate', async interaction => {
         const rol = interaction.options.getRole('rol');
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', ephemeral: true });
+        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', flags: 64 });
         if (!member.roles.cache.has(rol.id)) {
-            return interaction.reply({ content: `❌ **${user.tag}** zaten **${rol.name}** rolüne sahip değil!`, ephemeral: true });
+            return interaction.reply({ content: `❌ **${user.tag}** zaten **${rol.name}** rolüne sahip değil!`, flags: 64 });
         }
 
         try {
@@ -1726,7 +1726,7 @@ client.on('interactionCreate', async interaction => {
             await sendDM(user, dmEmbed);
             await interaction.reply(`✅ **${user.tag}** kullanıcısından **${rol.name}** rolü alındı.`);
         } catch (error) {
-            await interaction.reply({ content: `❌ Rol alınamadı: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Rol alınamadı: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -1760,13 +1760,13 @@ client.on('interactionCreate', async interaction => {
         const yeniNick = interaction.options.getString('yeni_nick') || null;
         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', ephemeral: true });
+        if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', flags: 64 });
 
         try {
             await member.setNickname(yeniNick, `Nick değiştirildi | Yetkili: ${interaction.user.tag}`);
             await interaction.reply(`✅ **${user.tag}** kullanıcısının nickname'i **${yeniNick || 'sıfırlandı'}** olarak güncellendi.`);
         } catch (error) {
-            await interaction.reply({ content: `❌ Nickname değiştirilemedi: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Nickname değiştirilemedi: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -1794,9 +1794,9 @@ client.on('interactionCreate', async interaction => {
 
         try {
             await kanal.send({ embeds: [embed], components: [row] });
-            await interaction.reply({ content: `✅ Anket <#${kanal.id}> kanalına gönderildi!`, ephemeral: true });
+            await interaction.reply({ content: `✅ Anket <#${kanal.id}> kanalına gönderildi!`, flags: 64 });
         } catch (error) {
-            await interaction.reply({ content: `❌ Anket gönderilemedi: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Anket gönderilemedi: ${error.message}`, flags: 64 });
         }
         return;
     }
@@ -1808,11 +1808,11 @@ client.on('interactionCreate', async interaction => {
         const idList = idListStr.split(',').map(id => id.trim()).filter(id => /^\d{17,20}$/.test(id));
 
         if (idList.length === 0) {
-            return interaction.reply({ content: '❌ Geçerli kullanıcı ID\'si bulunamadı! ID\'leri virgülle ayırın.', ephemeral: true });
+            return interaction.reply({ content: '❌ Geçerli kullanıcı ID\'si bulunamadı! ID\'leri virgülle ayırın.', flags: 64 });
         }
 
         if (idList.length > 50) {
-            return interaction.reply({ content: '❌ Tek seferde en fazla 50 kullanıcı banlanabilir!', ephemeral: true });
+            return interaction.reply({ content: '❌ Tek seferde en fazla 50 kullanıcı banlanabilir!', flags: 64 });
         }
 
         await interaction.deferReply();
@@ -1825,7 +1825,7 @@ client.on('interactionCreate', async interaction => {
 
                 await interaction.guild.bans.create(userId, {
                     reason: `[TOPLU BAN] ${reason} | Yetkili: ${interaction.user.tag}`,
-                    deleteMessageDays: 1
+                    deleteMessageSeconds: 86400
                 });
                 addModCase('BAN', userId, interaction.user.id, `[TOPLU BAN] ${reason}`);
 
@@ -1875,21 +1875,21 @@ async function handleButtonInteraction(interaction) {
         if (customId === 'poll_yes') {
             if (votes.yes.has(interaction.user.id)) {
                 votes.yes.delete(interaction.user.id);
-                return interaction.reply({ content: '✅ Evet oyunuz geri alındı.', ephemeral: true });
+                return interaction.reply({ content: '✅ Evet oyunuz geri alındı.', flags: 64 });
             }
             votes.no.delete(interaction.user.id);
             votes.yes.add(interaction.user.id);
-            return interaction.reply({ content: '✅ Evet oyu kaydedildi!', ephemeral: true });
+            return interaction.reply({ content: '✅ Evet oyu kaydedildi!', flags: 64 });
         }
 
         if (customId === 'poll_no') {
             if (votes.no.has(interaction.user.id)) {
                 votes.no.delete(interaction.user.id);
-                return interaction.reply({ content: '❌ Hayır oyunuz geri alındı.', ephemeral: true });
+                return interaction.reply({ content: '❌ Hayır oyunuz geri alındı.', flags: 64 });
             }
             votes.yes.delete(interaction.user.id);
             votes.no.add(interaction.user.id);
-            return interaction.reply({ content: '❌ Hayır oyu kaydedildi!', ephemeral: true });
+            return interaction.reply({ content: '❌ Hayır oyu kaydedildi!', flags: 64 });
         }
 
         if (customId === 'poll_results') {
@@ -1911,7 +1911,7 @@ async function handleButtonInteraction(interaction) {
                         )
                         .setTimestamp()
                 ],
-                ephemeral: true
+                flags: 64
             });
         }
     }
@@ -2243,7 +2243,7 @@ client.on('interactionCreate', async ekoInteraction => {
     // Yetki kontrolü (ana sistemle aynı)
     const hasRole = ekoInteraction.member.roles.cache.has(config.REQUIRED_ROLE_ID);
     if (!hasRole) {
-        return ekoInteraction.reply({ content: '❌ Bu komutu kullanmak için **Yetkili** rolüne sahip olmanız gerekiyor!', ephemeral: true });
+        return ekoInteraction.reply({ content: '❌ Bu komutu kullanmak için **Yetkili** rolüne sahip olmanız gerekiyor!', flags: 64 });
     }
 
     // --- /eko-istatistik ---
@@ -2277,7 +2277,7 @@ client.on('interactionCreate', async ekoInteraction => {
             .setTimestamp()
             .setFooter({ text: 'Eko Yıldız Otomasyon | Sentura 🦸 ekoyildiz' });
 
-        return ekoInteraction.reply({ embeds: [embed], ephemeral: true });
+        return ekoInteraction.reply({ embeds: [embed], flags: 64 });
     }
 
     // --- /eko-sifirla ---
@@ -2286,7 +2286,7 @@ client.on('interactionCreate', async ekoInteraction => {
         const onceki = ekoAbonerDatabase.get(hedef.id);
 
         if (!onceki) {
-            return ekoInteraction.reply({ content: `❌ **${hedef.tag}** için Eko Yıldız verisi bulunamadı.`, ephemeral: true });
+            return ekoInteraction.reply({ content: `❌ **${hedef.tag}** için Eko Yıldız verisi bulunamadı.`, flags: 64 });
         }
 
         ekoAbonerDatabase.delete(hedef.id);
@@ -2336,12 +2336,12 @@ client.on('interactionCreate', async ekoInteraction => {
             .setTimestamp()
             .setFooter({ text: 'Eko Yıldız Otomasyon' });
 
-        return ekoInteraction.reply({ embeds: [embed], ephemeral: true });
+        return ekoInteraction.reply({ embeds: [embed], flags: 64 });
     }
 
     // --- /eko-toplu-rol ---
     if (ekoInteraction.commandName === 'eko-toplu-rol') {
-        await ekoInteraction.deferReply({ ephemeral: true });
+        await ekoInteraction.deferReply({ flags: 64 });
 
         const guild = client.guilds.cache.get(EKO_GUILD_ID);
         if (!guild) return ekoInteraction.editReply('❌ Sunucu bulunamadı.');
