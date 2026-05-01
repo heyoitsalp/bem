@@ -2890,6 +2890,814 @@ client.on('messageDelete', async deletedMessage => {
     setTimeout(() => kayitKarsilamaMesajiniGonder(client), 2000);
 });
 
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║     EKO YILDIZ — GELİŞMİŞ SELAMLAMA + HOŞGELDİN SİSTEMİ       ║
+// ║     Versiyon: 3.0 | Geliştirici: Sentura 🦸 ekoyildiz           ║
+// ║     Bu bloğu index.js'inin en altına, client.login'den önce     ║
+// ║     yapıştır. Hiçbir şeyi değiştirmene gerek yok.               ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+// ============================================================
+//  YOUTUBE & SOSYAL MEDYA LİNKLERİ
+// ============================================================
+const YOUTUBE_ABONE_LINK = 'https://www.youtube.com/@eko8yildiz';
+const YOUTUBE_UYE_LINK   = 'https://www.youtube.com/channel/UCNSZYtuDQYsZYYQVJvErDVw/join';
+
+// ============================================================
+//  HOŞGELDİN SİSTEMİ — YAPILANDIRMA
+// ============================================================
+const HG_GUILD_ID   = config.GUILD_ID;
+const HG_KANAL_ID   = config.WELCOME_CHANNEL_ID;
+const HG_RENK       = '#FFD700';
+
+// İsteğe bağlı: Yeni üyelere otomatik verilecek Discord rolü
+// config.json'a  "MEMBER_ROLE_ID": "ROL_ID_BURAYA"  ekleyebilirsin
+const HG_ULER_ROL_ID = config.MEMBER_ROLE_ID || null;
+
+// ============================================================
+//  SELAMLAMA SİSTEMİ — YAPILANDIRMA
+// ============================================================
+const SELAMLAMA_COOLDOWN_MS    = 6000;   // Aynı kişi/kanal cooldown (ms)
+const SELAMLAMA_KANALLAR_HEPSI = true;   // true = tüm kanallar, false = sadece belirli kanallar
+// SELAMLAMA_KANALLAR_HEPSI false ise buradaki kanal ID'lerinde çalışır:
+const SELAMLAMA_KANAL_LISTESI  = [];     // örn: ['123456', '789012']
+
+// ============================================================
+//  IN-MEMORY VERİ DEPOLARI
+// ============================================================
+// Selamlama cooldown: "userId_channelId" → timestamp
+const selamlamaCooldown = new Map();
+
+// Hoşgeldin istatistikleri: { toplamKatilan, bugunKatilan, tarih }
+let hgIstatistik = { toplamKatilan: 0, bugunKatilan: 0, tarih: new Date().toISOString().slice(0, 10) };
+
+// Kullanıcı ruh halleri: userId → { tip, zaman } (son selamlama)
+const kullaniciRuhuHali = new Map();
+
+// ============================================================
+//  SELAMLAMA DESENLERI — Genişletilmiş
+// ============================================================
+const selamlamaDesenleri = [
+    // Selam / Merhaba
+    {
+        regex: /\b(selam|selamlar|hey|heyy|heyyy|heyyyy|merhaba|mrb|slm|sln|sa|slmm|slmlar|selamünaleyküm)\b/i,
+        tip: 'selam',
+        emoji: '👋'
+    },
+    // Günaydın
+    {
+        regex: /\b(günayd[ıi]n|gunaydin|günaydın|gün aydın|gnaydın|g\.a\.?)\b/i,
+        tip: 'günaydın',
+        emoji: '☀️'
+    },
+    // Tünaydın
+    {
+        regex: /\b(tünayd[ıi]n|tunaydın|tünaydın|tn\b)\b/i,
+        tip: 'tünaydın',
+        emoji: '🌤️'
+    },
+    // İyi akşamlar
+    {
+        regex: /\b(iyi ak[sş]amlar?|iyi aksam|iyi akşam)\b/i,
+        tip: 'iyi akşamlar',
+        emoji: '🌆'
+    },
+    // İyi geceler
+    {
+        regex: /\b(iyi geceler?|iyi gece|i\.g\.?)\b/i,
+        tip: 'iyi geceler',
+        emoji: '🌙'
+    },
+    // İyi uykular / Tatlı rüyalar
+    {
+        regex: /\b(iyi uykular?|tatl[ıi] r[üu]yalar?|iyi dinlenmeler?)\b/i,
+        tip: 'iyi uykular',
+        emoji: '😴'
+    },
+    // Hayırlı Cumalar
+    {
+        regex: /\b(hay[ıi]rl[ıi] cumalar?|hayırlı cuma|h\.c\.?)\b/i,
+        tip: 'hayırlı cuma',
+        emoji: '🕌'
+    },
+    // Selamun Aleyküm
+    {
+        regex: /\b(selamun aleyk[üu]m|selamın aleyküm|selamunaleyküm|s\.a\.?|^sa$)\b/i,
+        tip: 'selamun aleyküm',
+        emoji: '🤝'
+    },
+    // İyi günler
+    {
+        regex: /\b(iyi günler?|iyi gunler?|i\.g\.?)\b/i,
+        tip: 'iyi günler',
+        emoji: '🌟'
+    },
+    // Nasılsın / Naber
+    {
+        regex: /\b(nas[ıi]ls[ıi]n|nas[ıi]ls[ıi]n[ıi]z|naber|ne haber|n'aber|nbr|nabers)\b/i,
+        tip: 'nasılsın',
+        emoji: '😊'
+    },
+    // Ne yapıyorsun
+    {
+        regex: /\b(ne yap[ıi]yorsun|ne yap[ıi]yorsunuz|napıyorsun|nap[ıi]yon|n[ae]p[ıi]yorsun)\b/i,
+        tip: 'ne yapıyorsun',
+        emoji: '🤔'
+    },
+    // İyi bayramlar
+    {
+        regex: /\b(iyi bayramlar?|hay[ıi]rl[ıi] bayramlar?|bayram[ıi]n[ıi]z mübarek)\b/i,
+        tip: 'iyi bayramlar',
+        emoji: '🎉'
+    },
+    // Hoş geldin (birisi bunu yazarsa)
+    {
+        regex: /\b(ho[sş] geldin|ho[sş] bulduk|ho[sş] geldiniz)\b/i,
+        tip: 'hoş geldin',
+        emoji: '🎊'
+    },
+    // Görüşürüz / Güle güle
+    {
+        regex: /\b(görü[sş]ürüz|g[oö]r[uü][sş]r[uü]z|güle güle|g\.g\.?|bb|byebye|bye|bby|hoşça kal|ho[sş][cç]a kal)\b/i,
+        tip: 'görüşürüz',
+        emoji: '👋'
+    },
+];
+
+// ============================================================
+//  CEVAP HAVUZLARI — Her tip için zengin ve samimi cevaplar
+// ============================================================
+const cevapHavuzu = {
+
+    'selam': [
+        (u) => `Selam ${u}! 👋 Nasıl gidiyor, her şey yolunda mı?`,
+        (u) => `Hey hey, ${u} gelmiş! 😄 Ne var ne yok?`,
+        (u) => `Merhaba ${u}! 🌟 Seni görmek güzel!`,
+        (u) => `Selam ${u} 👋 Umarım günün harika geçiyordur!`,
+        (u) => `Oo, ${u}! Selam selam! 😁 Ne alemdesin?`,
+        (u) => `Hey ${u}! 🎉 Aramıza hoşgeldin, nasılsın?`,
+        (u) => `Merhaba ${u} 🌺 Bugün nasıl gidiyor?`,
+        (u) => `Selam ${u}! ✨ Seni gördüm, biraz daha güzelleşti burası 😄`,
+        (u) => `Heyy ${u}! 😊 Naber, ne alemdesin?`,
+        (u) => `Selamlar ${u}! 🤗 Umarım güzel bir gün geçiriyorsundur!`,
+    ],
+
+    'günaydın': [
+        (u) => `Günaydın ${u}! ☀️ Umarım güzel bir gün geçirirsin!`,
+        (u) => `Günaydın ${u}! 🌅 Yeni bir gün, yeni fırsatlar! Neşeli bir gün dilerim!`,
+        (u) => `Günaydın ${u} ☕ Kahveni al, güzel bir gün seni bekliyor!`,
+        (u) => `Günaydın ${u}! 🌞 Gün aydın olsun, enerjin bol olsun!`,
+        (u) => `Günaydın ${u} 🌻 Bugün harika bir gün olacak, hissediyorum!`,
+        (u) => `Günaydın günaydın ${u}! ☀️ Erken kalkmışsın, aferin! Güzel bir gün diliyorum!`,
+        (u) => `Günaydın ${u}! 🌄 Umarım bugün her şey istediğin gibi gider!`,
+        (u) => `Günaydın ${u} 🍳 Kahvaltını güzel yap, güzel günler güzel başlangıçlara bakar!`,
+    ],
+
+    'tünaydın': [
+        (u) => `Tünaydın ${u}! 🌤️ Günün nasıl geçiyor?`,
+        (u) => `Tünaydın ${u} 😊 Öğleden sonranın keyfini çıkar!`,
+        (u) => `Tünaydın ${u}! 🌻 Umarım öğleden sonran verimli ve güzel geçiyor!`,
+        (u) => `Tünaydın ${u} ☀️ Gün nasıl gidiyor, yoruldun mu?`,
+        (u) => `Tünaydın ${u}! 🫖 Öğleden sonra bir çay içerken bize de uğramış! 😄`,
+    ],
+
+    'iyi akşamlar': [
+        (u) => `İyi akşamlar ${u}! 🌆 Günün nasıl geçti?`,
+        (u) => `İyi akşamlar ${u} 🌇 Huzurlu bir akşam dilerim!`,
+        (u) => `İyi akşamlar ${u}! ✨ Keyifli bir akşam geçirmeni dilerim!`,
+        (u) => `İyi akşamlar ${u} 🌃 Akşam yemeği güzel geçsin!`,
+        (u) => `İyi akşamlar ${u}! 🍽️ Umarım güzel bir gün geçirdindir, dinlen biraz!`,
+        (u) => `İyi akşamlar ${u} 🌉 Akşamın hayırlı ve güzel geçsin!`,
+    ],
+
+    'iyi geceler': [
+        (u) => `İyi geceler ${u}! 🌙 Tatlı rüyalar!`,
+        (u) => `İyi geceler ${u} 😴 Dinlendirici bir uyku dilerim!`,
+        (u) => `İyi geceler ${u}! 🌟 Güzel rüyalar görmeni dilerim!`,
+        (u) => `İyi geceler ${u} 🌙 Yarın güzel bir günle uyanırsın inşallah!`,
+        (u) => `İyi geceler ${u}! 💤 Uyku güzel, erken yat erken kalk! 😄`,
+        (u) => `İyi geceler ${u} ⭐ Yıldızlı geceler geçir!`,
+        (u) => `Geceleri hayırlı olsun ${u}! 🌛 Tatlı rüyalar dilerim!`,
+        (u) => `İyi geceler ${u}! 🌜 Dinlendirici bir uyku, güzel bir sabah dilerim!`,
+    ],
+
+    'iyi uykular': [
+        (u) => `İyi uykular ${u}! 😴🌙 Tatlı rüyalar dilerim!`,
+        (u) => `İyi uykular ${u} 💤 Dinlendirici geceler!`,
+        (u) => `İyi uykular ${u}! 🌛 Tatlı rüyalar, yarın görüşürüz!`,
+        (u) => `Tatlı uykular ${u}! 🧸 Bol bol dinlen, yarın enerjik uyan!`,
+        (u) => `İyi uykular ${u} 🌜 Rüyanda güzel şeyler gör!`,
+        (u) => `Buyur ${u}, git iyi uyu! 😄🌙 Tatlı rüyalar!`,
+    ],
+
+    'hayırlı cuma': [
+        (u) => `Hayırlı Cumalar ${u}! 🤲 Cuma gününüz mübarek olsun!`,
+        (u) => `Hayırlı Cumalar ${u} 🕌 Allah kabul etsin, hayırlar getirsin!`,
+        (u) => `Hayırlı Cumalar ${u}! ✨ Cuma bereketli olsun, duaların kabul olsun!`,
+        (u) => `Ve cumamız hayırlı olsun ${u}! 🤲 Mübarek günler dilerim!`,
+        (u) => `Hayırlı Cumalar ${u} 🕌 Cuma gününüzü tebrik ederim, hayırlı olsun!`,
+    ],
+
+    'selamun aleyküm': [
+        (u) => `Ve Aleyküm Selam ${u}! 🤝 Nasılsın, hayırlı işler!`,
+        (u) => `Ve Aleyküm Selam ${u} 🌟 Hoşgeldin, ne var ne yok?`,
+        (u) => `Ve Aleyküm Selam ${u}! 😊 Allah selamet versin!`,
+        (u) => `Ve Aleyküm Selam ve Rahmetullahi ve Berakatühü ${u}! 🤲 Nasılsın?`,
+        (u) => `Ve Aleyküm Selam ${u}! ✨ Hayırlı günler dilerim!`,
+    ],
+
+    'iyi günler': [
+        (u) => `İyi günler ${u}! 🌟 Umarım güzel bir gün geçiriyorsundur!`,
+        (u) => `İyi günler ${u} ☀️ Sana da iyi günler!`,
+        (u) => `İyi günler ${u}! 😊 Keyifli ve verimli bir gün dilerim!`,
+        (u) => `İyi günler ${u} 🌺 Bugünün her anının güzel geçmesini dilerim!`,
+    ],
+
+    'nasılsın': [
+        (u) => `İyiyim teşekkürler ${u}! 😊 Sen nasılsın?`,
+        (u) => `Süperim ${u}, sormana sevindim! 🌟 Ya sen?`,
+        (u) => `Harika hissediyorum ${u}! ✨ Bugün nasılsın sen?`,
+        (u) => `İyiyim ${u}! 😄 Bot olmanın keyfini çıkarıyorum, sen nasılsın?`,
+        (u) => `Mükemmelim ${u} 🚀 Her gün daha iyi oluyorum! Sen nasılsın?`,
+        (u) => `İyiyim sağ ol ${u}! 🙏 Umarım sen de iyisindir!`,
+    ],
+
+    'ne yapıyorsun': [
+        (u) => `Sunucuyu koruyorum ${u}! 🦸 Sen ne yapıyorsun?`,
+        (u) => `Herkese yardım etmeye çalışıyorum ${u} 😄 Sen?`,
+        (u) => `Discord'u izliyorum ${u}! 👀 Ne soracaksın acaba?`,
+        (u) => `Görevimin başındayım ${u}! 💪 Bir şeye yardım etmemi ister misin?`,
+        (u) => `Seninle sohbet etmeye hazırlanıyordum ${u}! 🎉`,
+    ],
+
+    'iyi bayramlar': [
+        (u) => `Bayramın kutlu olsun ${u}! 🎉 Bol şeker, bol neşe dilerim!`,
+        (u) => `İyi bayramlar ${u}! 🎊 Bayramın sağlık ve mutlulukla geçsin!`,
+        (u) => `Bayramınız mübarek olsun ${u}! 🌟 Sevdiklerinizle güzel vakit geçirin!`,
+        (u) => `Hayırlı bayramlar ${u}! 🤲 Bayram coşkunuz bol olsun!`,
+    ],
+
+    'hoş geldin': [
+        (u) => `Hoş bulduk ${u}! 😊 Aramıza katıldığın için memnunuz!`,
+        (u) => `Hoş bulduk ${u} 🎉 Güzel vakit geçirirsin burada!`,
+        (u) => `Hoş bulduk ${u}! 🌟 Seni görmek güzel!`,
+    ],
+
+    'görüşürüz': [
+        (u) => `Görüşürüz ${u}! 👋 İyi günler dilerim!`,
+        (u) => `Güle güle ${u}! 😊 Yakında görüşmek üzere!`,
+        (u) => `Görüşürüz ${u} 🌟 Kendin iyi bak!`,
+        (u) => `Güle güle ${u}! 👋 Umarım kısa sürede dönersin!`,
+        (u) => `Bye bye ${u}! ✌️ Güzel günler!`,
+        (u) => `Görüşmek üzere ${u}! 🎉 Kendine iyi bak!`,
+    ],
+};
+
+// ============================================================
+//  ÖZEL DURUM ALGILAMA — Ek akıllı yanıtlar
+// ============================================================
+const ozelDurumlar = [
+    {
+        regex: /\b(yorgunum|çok yoruldum|yoruldum|bitik|bitiktim)\b/i,
+        cevaplar: [
+            (u) => `Aww ${u}, biraz dinlen! 😔 Kendin iyi bak, sen değerlisin!`,
+            (u) => `Hadi ${u}, bir mola ver! ☕ Çay ya da kahve iç, dinlen biraz.`,
+            (u) => `${u} yorulmuşsun, normal! 💪 Biraz dinlenince geçer, kendine dikkat et!`,
+        ]
+    },
+    {
+        regex: /\b(mutluyum|çok mutluyum|harikayım|süperim|mükemmelim|harika hissediyorum)\b/i,
+        cevaplar: [
+            (u) => `Waa, mutlu ${u} mutlu! 🎉 Bu enerjin hiç gitmesin!`,
+            (u) => `Süper ${u}! 🌟 Mutluluğun bu sunucuya da yansıyor, iyi ki varsın!`,
+            (u) => `${u} mutlu = herkes mutlu! 😄🎊 Enerjin çok güzel!`,
+        ]
+    },
+    {
+        regex: /\b(üzgünüm|üzüldüm|kötüyüm|mutsuzum|berbat)\b/i,
+        cevaplar: [
+            (u) => `Aww ${u} 🥺 Geçer, her şey geçici! Umarım kısa sürede düzelir.`,
+            (u) => `${u} üzülme 💙 Yanındayız, iyi günler yakında!`,
+            (u) => `Geçmiş olsun ${u} 🤗 Zor anlar geçici, iyi anlar kalıcı!`,
+        ]
+    },
+    {
+        regex: /\b(sıkıldım|sıkılıyorum|can s[ıi]k[ıi]c[ıi])\b/i,
+        cevaplar: [
+            (u) => `${u} sıkılmışsın ha! 😄 Biraz konuşalım mı?`,
+            (u) => `Sıkılmışsan ${u}, gel sohbet edelim! 🎉 Ya da YouTube'umuza göz at: ${YOUTUBE_ABONE_LINK}`,
+            (u) => `${u} sıkılıyorsa sunucuda bir şeyler keşfet! 🌟 Yoksa bana yaz, sohbet ederiz!`,
+        ]
+    },
+    {
+        regex: /\b(teşekkürler?|teşekkür ederim|sağ ol|sağolasın|eyw|eyv)\b/i,
+        cevaplar: [
+            (u) => `Rica ederim ${u}! 😊 Her zaman buradayım!`,
+            (u) => `Ne demek ${u}, her zaman! 🌟`,
+            (u) => `Rica ederim ${u}! 🤗 Bir şeye daha ihtiyacın olursa söyle!`,
+        ]
+    },
+];
+
+// ============================================================
+//  YARDIMCI FONKSİYON — Rastgele cevap seç
+// ============================================================
+function rastgeleCevap(havuz, kullaniciAdi) {
+    const fn = havuz[Math.floor(Math.random() * havuz.length)];
+    return fn(kullaniciAdi);
+}
+
+// ============================================================
+//  YARDIMCI FONKSİYON — Günlük istatistik sıfırla
+// ============================================================
+function hgGunlukSifirla() {
+    const bugun = new Date().toISOString().slice(0, 10);
+    if (hgIstatistik.tarih !== bugun) {
+        hgIstatistik.bugunKatilan = 0;
+        hgIstatistik.tarih = bugun;
+    }
+}
+
+// ============================================================
+//  YARDIMCI FONKSİYON — Hesap güvenlik seviyesi
+// ============================================================
+function hesapGuvenligiHesapla(createdTimestamp) {
+    const yasiGun = Math.floor((Date.now() - createdTimestamp) / 86400000);
+    if (yasiGun < 3)  return { seviye: 'Çok Düşük', emoji: '🔴', renk: '#FF0000', puan: 1 };
+    if (yasiGun < 7)  return { seviye: 'Düşük',     emoji: '🟠', renk: '#FF6600', puan: 2 };
+    if (yasiGun < 30) return { seviye: 'Orta',       emoji: '🟡', renk: '#FFD700', puan: 3 };
+    if (yasiGun < 90) return { seviye: 'İyi',        emoji: '🟢', renk: '#00CC44', puan: 4 };
+    return               { seviye: 'Güvenli',         emoji: '✅', renk: '#00FF88', puan: 5 };
+}
+
+// ============================================================
+//  YARDIMCI FONKSİYON — Sunucuya katılım rozeti
+// ============================================================
+function katilimRozeti(sira) {
+    if (sira === 1)   return '👑 İlk Üye!';
+    if (sira <= 5)    return '🥇 İlk 5!';
+    if (sira <= 10)   return '🥈 İlk 10!';
+    if (sira <= 50)   return '🥉 İlk 50!';
+    if (sira <= 100)  return '💎 İlk 100!';
+    if (sira <= 500)  return '🌟 İlk 500!';
+    if (sira <= 1000) return '⭐ İlk 1000!';
+    return `#${sira}. Üye`;
+}
+
+// ============================================================
+//  YARDIMCI FONKSİYON — Haftanın günü Türkçe
+// ============================================================
+function haftaninGunu() {
+    const gunler = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+    return gunler[new Date().getDay()];
+}
+
+// ============================================================
+//  YARDIMCI FONKSİYON — Embed rengi sira'ya göre
+// ============================================================
+function sirayaGoreRenk(sira) {
+    if (sira === 1)  return '#FFD700';  // Altın
+    if (sira <= 10)  return '#C0C0C0';  // Gümüş
+    if (sira <= 50)  return '#CD7F32';  // Bronz
+    if (sira <= 100) return '#00BFFF';  // Mavi
+    return '#FFD700';                   // Varsayılan altın
+}
+
+// ============================================================
+//  SELAMLAMA SİSTEMİ — messageCreate Handler
+// ============================================================
+client.on('messageCreate', async message => {
+    if (message.author.bot) return;
+    if (!message.guild)     return; // Sadece sunucu, DM değil
+
+    const icerik = message.content.trim();
+    if (!icerik) return;
+
+    // Kanal filtresi
+    if (!SELAMLAMA_KANALLAR_HEPSI && !SELAMLAMA_KANAL_LISTESI.includes(message.channelId)) return;
+
+    // Cooldown kontrolü
+    const coolKey = `${message.author.id}_${message.channelId}`;
+    const sonIstek = selamlamaCooldown.get(coolKey);
+    if (sonIstek && Date.now() - sonIstek < SELAMLAMA_COOLDOWN_MS) return;
+
+    const kullaniciAdi = message.member?.displayName || message.author.username;
+
+    // ── Önce özel durumları kontrol et (üzgün, mutlu, yorgun vb.) ──
+    for (const { regex, cevaplar } of ozelDurumlar) {
+        if (regex.test(icerik)) {
+            const cevap = rastgeleCevap(cevaplar, kullaniciAdi);
+            selamlamaCooldown.set(coolKey, Date.now());
+            setTimeout(() => selamlamaCooldown.delete(coolKey), SELAMLAMA_COOLDOWN_MS);
+
+            // Ruh halini kaydet
+            kullaniciRuhuHali.set(message.author.id, { tip: 'ozel', zaman: new Date() });
+
+            try {
+                await message.reply(cevap);
+            } catch { /* sessizce geç */ }
+            return;
+        }
+    }
+
+    // ── Standart selamlamaları kontrol et ──
+    let eslesenDesen = null;
+    for (const desen of selamlamaDesenleri) {
+        if (desen.regex.test(icerik)) {
+            eslesenDesen = desen;
+            break;
+        }
+    }
+    if (!eslesenDesen) return;
+
+    // Cooldown başlat
+    selamlamaCooldown.set(coolKey, Date.now());
+    setTimeout(() => selamlamaCooldown.delete(coolKey), SELAMLAMA_COOLDOWN_MS);
+
+    // Ruh halini kaydet
+    kullaniciRuhuHali.set(message.author.id, { tip: eslesenDesen.tip, zaman: new Date() });
+
+    // Cevap üret
+    const havuz = cevapHavuzu[eslesenDesen.tip];
+    if (!havuz) return;
+
+    const cevap = rastgeleCevap(havuz, kullaniciAdi);
+
+    try {
+        // %20 ihtimalle tepki de ekle
+        if (Math.random() < 0.2) {
+            await message.react(eslesenDesen.emoji).catch(() => {});
+        }
+        await message.reply(cevap);
+    } catch { /* sessizce geç */ }
+});
+
+// ============================================================
+//  HOŞGELDİN SİSTEMİ — guildMemberAdd Handler (GELİŞMİŞ)
+// ============================================================
+client.on('guildMemberAdd', async member => {
+    if (member.guild.id !== HG_GUILD_ID) return;
+    if (!HG_KANAL_ID) return;
+
+    hgGunlukSifirla();
+    hgIstatistik.toplamKatilan++;
+    hgIstatistik.bugunKatilan++;
+
+    try {
+        const guild = member.guild;
+
+        // Üye listesini getir (doğru sıra için)
+        await guild.members.fetch().catch(() => {});
+        const uyeSirasi  = guild.memberCount;
+        const rozet      = katilimRozeti(uyeSirasi);
+        const guvenlik   = hesapGuvenligiHesapla(member.user.createdTimestamp);
+        const embedRenk  = sirayaGoreRenk(uyeSirasi);
+
+        // Hesap yaşı (gün)
+        const hesapYasiGun = Math.floor((Date.now() - member.user.createdTimestamp) / 86400000);
+        let hesapYasiStr;
+        if (hesapYasiGun < 1)        hesapYasiStr = 'Bugün oluşturuldu ⚠️';
+        else if (hesapYasiGun < 30)  hesapYasiStr = `${hesapYasiGun} gün`;
+        else if (hesapYasiGun < 365) hesapYasiStr = `${Math.floor(hesapYasiGun / 30)} ay`;
+        else                          hesapYasiStr = `${Math.floor(hesapYasiGun / 365)} yıl ${Math.floor((hesapYasiGun % 365) / 30)} ay`;
+
+        // Bot mu insan mı?
+        const botUyeSayisi   = guild.members.cache.filter(m => m.user.bot).size;
+        const insanUyeSayisi = guild.memberCount - botUyeSayisi;
+
+        // Haftanın günü + saat
+        const simdi  = new Date();
+        const saat   = simdi.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        const gun    = haftaninGunu();
+
+        // ── ANA HOŞGELDİN EMBED ──
+        const hosgeldinEmbed = new EmbedBuilder()
+            .setColor(embedRenk)
+            .setAuthor({
+                name: `${guild.name} — Yeni Üye Katıldı!`,
+                iconURL: guild.iconURL({ dynamic: true, size: 64 }) || undefined,
+            })
+            .setTitle(`🎉 Hoşgeldin, ${member.user.username}!`)
+            .setDescription(
+                [
+                    `> **${guild.name}** sunucusuna hoşgeldin! 🌟`,
+                    `> Kuralları okumayı ve kanalları keşfetmeyi unutma!`,
+                    `> \u200b`,
+                    `> 📺 **YouTube kanalımıza abone ol, gelişmelerden haberdar ol!**`,
+                ].join('\n')
+            )
+            .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
+            .addFields(
+                // ── Kullanıcı Bilgileri ──
+                {
+                    name: '👤 Kullanıcı Bilgileri',
+                    value: [
+                        `> **Kullanıcı:** ${member.user.toString()} — \`${member.user.username}\``,
+                        `> **Kullanıcı ID:** \`${member.user.id}\``,
+                        `> **Hesap Oluşturma:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:D> (<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>)`,
+                        `> **Hesap Yaşı:** ${hesapYasiStr}`,
+                    ].join('\n'),
+                    inline: false
+                },
+                // ── Sunucu Bilgileri ──
+                {
+                    name: '🏰 Sunucu Bilgileri',
+                    value: [
+                        `> **Giriş Sırası:** ${rozet} — \`${uyeSirasi}. üye\``,
+                        `> **İnsan Üye:** \`${insanUyeSayisi}\` | **Bot:** \`${botUyeSayisi}\``,
+                        `> **Katılım Günü:** ${gun}, ${saat}`,
+                        `> **Bugün Katılan:** \`${hgIstatistik.bugunKatilan}\` üye`,
+                    ].join('\n'),
+                    inline: false
+                },
+                // ── Güvenlik ──
+                {
+                    name: '🔒 Hesap Güvenliği',
+                    value: `> **Güvenlik Seviyesi:** ${guvenlik.seviye} ${guvenlik.emoji}`,
+                    inline: true
+                },
+                // ── Rol Bilgisi ──
+                {
+                    name: '🎭 Verilen Rol',
+                    value: HG_ULER_ROL_ID
+                        ? `> <@&${HG_ULER_ROL_ID}> rolü verildi ✅`
+                        : `> **Member** rolü verildi ✅`,
+                    inline: true
+                },
+                // ── Boş alan ──
+                { name: '\u200b', value: '\u200b', inline: false },
+                // ── YouTube ──
+                {
+                    name: '📺 Eko Yıldız YouTube',
+                    value: [
+                        `> 🔔 **[Abone Ol!](${YOUTUBE_ABONE_LINK})** — Yeni videolar kaçırma!`,
+                        `> 💎 **[Üye Ol!](${YOUTUBE_UYE_LINK})** — Özel içeriklere eriş!`,
+                    ].join('\n'),
+                    inline: false
+                },
+                // ── Karşılama ──
+                {
+                    name: '💬 Sunucu Ekibinden',
+                    value: [
+                        `> Merhabalar, sunucumuza hoşgeldiniz! Sunucumuza katıldığın`,
+                        `> için üzerine **Member** rolünü başarıyla verdim! 🎊`,
+                        `> Herhangi bir sorun veya sorum için yetkililere başvurabilirsin.`,
+                    ].join('\n'),
+                    inline: false
+                }
+            )
+            .setImage(
+                // Banner resmi (isteğe bağlı — kendin ekleyebilirsin)
+                // 'https://i.imgur.com/XXXXX.png'
+                null
+            )
+            .setFooter({
+                text: `Eko Yıldız | Sentura 🦸 ekoyildiz • ${guild.memberCount} üye`,
+                iconURL: guild.iconURL({ dynamic: true }) || undefined,
+            })
+            .setTimestamp();
+
+        // null image'ı kaldır
+        if (!hosgeldinEmbed.data.image) delete hosgeldinEmbed.data.image;
+
+        // ── BUTONLAR ──
+        const butonSatiri = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setLabel('🔔 Abone Ol!')
+                .setStyle(ButtonStyle.Link)
+                .setURL(YOUTUBE_ABONE_LINK),
+            new ButtonBuilder()
+                .setLabel('💎 Kanal Üyesi Ol!')
+                .setStyle(ButtonStyle.Link)
+                .setURL(YOUTUBE_UYE_LINK),
+            new ButtonBuilder()
+                .setLabel(`👥 ${guild.memberCount}. Üye`)
+                .setStyle(ButtonStyle.Secondary)
+                .setCustomId('hg_uyesirasi')
+                .setDisabled(true),
+        );
+
+        // ── Kanalı getir ve gönder ──
+        const kanal = await client.channels.fetch(HG_KANAL_ID).catch(() => null);
+        if (!kanal) return;
+
+        await kanal.send({
+            content: `👋 ${member.toString()} sunucumuza katıldı!`,
+            embeds: [hosgeldinEmbed],
+            components: [butonSatiri],
+        });
+
+        // ── Üyeye DM gönder ──
+        const dmEmbed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle(`🌟 ${guild.name} Sunucusuna Hoşgeldin!`)
+            .setThumbnail(guild.iconURL({ dynamic: true, size: 128 }) || undefined)
+            .setDescription(
+                [
+                    `Merhaba **${member.user.username}**! 🎉`,
+                    ``,
+                    `**${guild.name}** sunucusuna hoşgeldin!`,
+                    `Kuralları okumayı ve kanalları keşfetmeyi unutma.`,
+                    ``,
+                    `📺 **YouTube Kanalımız:**`,
+                    `🔔 [Abone Ol!](${YOUTUBE_ABONE_LINK}) — Yeni videolardan haberdar ol!`,
+                    `💎 [Kanal Üyesi Ol!](${YOUTUBE_UYE_LINK}) — Özel içeriklere eriş!`,
+                    ``,
+                    `Herhangi bir sorun veya sorun için sunucudaki yetkililerle iletişime geçebilirsin.`,
+                    ``,
+                    `Keyifli vakit geçirmeni dileriz! 🌟`,
+                ].join('\n')
+            )
+            .setFooter({ text: 'Eko Yıldız | Sentura 🦸 ekoyildiz' })
+            .setTimestamp();
+
+        const dmButon = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setLabel('📺 YouTube Kanalı')
+                .setStyle(ButtonStyle.Link)
+                .setURL(YOUTUBE_ABONE_LINK),
+            new ButtonBuilder()
+                .setLabel('💎 Üye Ol')
+                .setStyle(ButtonStyle.Link)
+                .setURL(YOUTUBE_UYE_LINK),
+        );
+
+        try {
+            await member.user.send({ embeds: [dmEmbed], components: [dmButon] });
+        } catch {
+            // DM kapalıysa sessizce geç
+        }
+
+        // ── Opsiyonel: Üyeye otomatik rol ver ──
+        if (HG_ULER_ROL_ID) {
+            try {
+                const memberRol = guild.roles.cache.get(HG_ULER_ROL_ID);
+                if (memberRol) {
+                    await member.roles.add(memberRol, 'Otomatik — Yeni üye rolü').catch(() => {});
+                }
+            } catch { /* sessizce geç */ }
+        }
+
+        // ── Log kanalına bildir ──
+        const logHgEmbed = new EmbedBuilder()
+            .setColor(guvenlik.renk)
+            .setTitle('👋 Yeni Üye Katıldı')
+            .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+            .addFields(
+                { name: '👤 Kullanıcı', value: `${member.user.tag}\n(${member.user.id})`, inline: true },
+                { name: '📊 Sıra', value: `${uyeSirasi}. üye`, inline: true },
+                { name: '🔒 Güvenlik', value: `${guvenlik.seviye} ${guvenlik.emoji}`, inline: true },
+                { name: '📅 Hesap Yaşı', value: hesapYasiStr, inline: true },
+                { name: '📆 Katılım', value: `${gun}, ${saat}`, inline: true },
+                { name: '📩 DM', value: 'Gönderildi', inline: true },
+            )
+            .setTimestamp()
+            .setFooter({ text: `Eko Yıldız | Bugün ${hgIstatistik.bugunKatilan}. katılan` });
+
+        if (config.LOG_CHANNEL_ID) {
+            try {
+                const logKanal = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
+                if (logKanal) await logKanal.send({ embeds: [logHgEmbed] });
+            } catch { /* log kanalı yoksa geç */ }
+        }
+
+        console.log(`[👋 HOŞGELDİN] ${member.user.tag} (${member.user.id}) — ${uyeSirasi}. üye | Güvenlik: ${guvenlik.seviye}`);
+
+    } catch (err) {
+        console.error('[❌ HOŞGELDİN] Hata:', err.message);
+    }
+});
+
+// ============================================================
+//  HOŞGELDİN — UĞURLAMA SİSTEMİ (Üye ayrıldığında)
+// ============================================================
+client.on('guildMemberRemove', async member => {
+    if (member.guild.id !== HG_GUILD_ID) return;
+    if (!HG_KANAL_ID) return;
+
+    try {
+        const kanal = await client.channels.fetch(HG_KANAL_ID).catch(() => null);
+        if (!kanal) return;
+
+        const kalisSuresi = member.joinedTimestamp
+            ? Math.floor((Date.now() - member.joinedTimestamp) / 86400000)
+            : null;
+
+        let kalisSuresiStr = 'Bilinmiyor';
+        if (kalisSuresi !== null) {
+            if (kalisSuresi < 1)         kalisSuresiStr = 'Bugün katıldı';
+            else if (kalisSuresi === 1)   kalisSuresiStr = '1 gün';
+            else if (kalisSuresi < 30)    kalisSuresiStr = `${kalisSuresi} gün`;
+            else if (kalisSuresi < 365)   kalisSuresiStr = `${Math.floor(kalisSuresi / 30)} ay`;
+            else                          kalisSuresiStr = `${Math.floor(kalisSuresi / 365)} yıl`;
+        }
+
+        const ayrılmaEmbed = new EmbedBuilder()
+            .setColor('#FF6600')
+            .setAuthor({
+                name: `${member.guild.name} — Üye Ayrıldı`,
+                iconURL: member.guild.iconURL({ dynamic: true }) || undefined,
+            })
+            .setTitle(`👋 Güle Güle, ${member.user.username}!`)
+            .setDescription(
+                [
+                    `**${member.user.username}** sunucumuzdan ayrıldı.`,
+                    `Umarız yakında tekrar görüşürüz! 💙`,
+                ].join('\n')
+            )
+            .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 128 }))
+            .addFields(
+                { name: '👤 Kullanıcı', value: `${member.user.tag}\n(\`${member.user.id}\`)`, inline: true },
+                { name: '⏱️ Kalış Süresi', value: kalisSuresiStr, inline: true },
+                { name: '👥 Kalan Üye', value: `${member.guild.memberCount} üye`, inline: true },
+            )
+            .setFooter({ text: 'Eko Yıldız | Sentura 🦸 ekoyildiz' })
+            .setTimestamp();
+
+        await kanal.send({ embeds: [ayrılmaEmbed] });
+
+    } catch (err) {
+        console.error('[❌ UĞURLAMA] Hata:', err.message);
+    }
+});
+
+// ============================================================
+//  /hg-istatistik KOMUTU — Hoşgeldin istatistikleri
+//  Bu komutu commands[] dizisine eklemeyi unutma:
+//
+//  new SlashCommandBuilder()
+//      .setName('hg-istatistik')
+//      .setDescription('Hoşgeldin sisteminin istatistiklerini gösterir.'),
+//
+//  new SlashCommandBuilder()
+//      .setName('selamlama-istatistik')
+//      .setDescription('Selamlama sisteminin istatistiklerini gösterir.'),
+// ============================================================
+
+client.on('interactionCreate', async hgInteraction => {
+    if (!hgInteraction.isChatInputCommand()) return;
+    if (!['hg-istatistik', 'selamlama-istatistik'].includes(hgInteraction.commandName)) return;
+
+    const hasRole = hgInteraction.member?.roles?.cache?.has(config.REQUIRED_ROLE_ID);
+    if (!hasRole) {
+        return hgInteraction.reply({ content: '❌ Bu komutu kullanmak için **Yetkili** rolüne sahip olmanız gerekiyor!', flags: 64 });
+    }
+
+    if (hgInteraction.commandName === 'hg-istatistik') {
+        hgGunlukSifirla();
+
+        const embed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle('👋 Hoşgeldin Sistemi — İstatistikler')
+            .addFields(
+                { name: '👥 Toplam Katılan (Bu Oturum)', value: String(hgIstatistik.toplamKatilan), inline: true },
+                { name: '📅 Bugün Katılan', value: String(hgIstatistik.bugunKatilan), inline: true },
+                { name: '🏰 Mevcut Üye Sayısı', value: String(hgInteraction.guild.memberCount), inline: true },
+                { name: '📺 YouTube Abone Linki', value: `[Abone Ol!](${YOUTUBE_ABONE_LINK})`, inline: true },
+                { name: '💎 YouTube Üyelik Linki', value: `[Üye Ol!](${YOUTUBE_UYE_LINK})`, inline: true },
+            )
+            .setTimestamp()
+            .setFooter({ text: 'Eko Yıldız Hoşgeldin Sistemi' });
+
+        return hgInteraction.reply({ embeds: [embed], flags: 64 });
+    }
+
+    if (hgInteraction.commandName === 'selamlama-istatistik') {
+        const cooldownSayisi = selamlamaCooldown.size;
+        const ruhalSayisi    = kullaniciRuhuHali.size;
+
+        const embed = new EmbedBuilder()
+            .setColor('#5865F2')
+            .setTitle('💬 Selamlama Sistemi — İstatistikler')
+            .addFields(
+                { name: '⏱️ Aktif Cooldown', value: `${cooldownSayisi} kullanıcı`, inline: true },
+                { name: '😊 Takip Edilen Ruh Hali', value: `${ruhalSayisi} kullanıcı`, inline: true },
+                { name: '📊 Tanımlı Selamlama', value: `${selamlamaDesenleri.length} desen`, inline: true },
+                { name: '💬 Özel Durum', value: `${ozelDurumlar.length} durum`, inline: true },
+                { name: '⚡ Cooldown Süresi', value: `${SELAMLAMA_COOLDOWN_MS / 1000} saniye`, inline: true },
+                { name: '📡 Kapsam', value: SELAMLAMA_KANALLAR_HEPSI ? 'Tüm Kanallar' : `${SELAMLAMA_KANAL_LISTESI.length} Kanal`, inline: true },
+            )
+            .setTimestamp()
+            .setFooter({ text: 'Eko Yıldız Selamlama Sistemi' });
+
+        return hgInteraction.reply({ embeds: [embed], flags: 64 });
+    }
+});
+
+// ============================================================
+//  KOMUT KAYIT EKİ — Bu komutları commands[] dizisine ekle:
+// ============================================================
+//
+//   new SlashCommandBuilder()
+//       .setName('hg-istatistik')
+//       .setDescription('Hoşgeldin sisteminin istatistiklerini gösterir.'),
+//
+//   new SlashCommandBuilder()
+//       .setName('selamlama-istatistik')
+//       .setDescription('Selamlama sisteminin istatistiklerini gösterir.'),
+//
+// ============================================================
+
 // ============================================================
 //  BAŞLATMA
 // ============================================================
