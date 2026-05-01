@@ -3696,262 +3696,203 @@ client.on('interactionCreate', async hgInteraction => {
 //       .setName('selamlama-istatistik')
 //       .setDescription('Selamlama sisteminin istatistiklerini gösterir.'),
 //
-// ============================================================
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║     EKO YILDIZ — 7/24 SES KANALI SİSTEMİ                       ║
-// ║     Bot belirtilen ses kanalında sürekli durur,                 ║
-// ║     atılırsa veya bağlantı kesilirse otomatik yeniden bağlanır  ║
-// ║     Versiyon: 1.0 | Sentura 🦸 ekoyildiz                       ║
+// ║     EKO YILDIZ — 7/24 SES KANALI SİSTEMİ (RENDER UYUMLU)      ║
+// ║     @discordjs/voice KULLANMAZ — Gateway üzerinden çalışır     ║
+// ║     Render free tier dahil her platformda çalışır              ║
+// ║     Versiyon: 2.0 | Sentura 🦸 ekoyildiz                       ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
-// ── Gerekli paket: @discordjs/voice ──
-// Eğer yüklü değilse terminalde şunu çalıştır:
-// npm install @discordjs/voice @discordjs/opus sodium-native
-// NOT: sodium-native yerine libsodium-wrappers de olur:
-// npm install @discordjs/voice @discordjs/opus libsodium-wrappers
-
-const {
-    joinVoiceChannel,
-    VoiceConnectionStatus,
-    entersState,
-    getVoiceConnection,
-} = require('@discordjs/voice');
+// NOT: Bu sistem @discordjs/voice KULLANMAZ.
+// Doğrudan Discord Gateway üzerinden ses kanalına bağlanır.
+// UDP gerektirmez — Render dahil her platformda çalışır.
 
 // ============================================================
 //  YAPILANDIRMA
 // ============================================================
-const SESKANAL_GUILD_ID   = config.GUILD_ID;             // Ana sunucu
-const SESKANAL_KANAL_ID   = '1393552494180958258';        // Hedef ses kanalı
-const BAGLANTI_YENILE_MS  = 5_000;    // Bağlantı kopunca kaç ms sonra yeniden bağlanır (5sn)
-const MAX_YENIDEN_DENEME  = 10;       // Arka arkaya maksimum deneme sayısı
-const DENEME_ARALIK_MS    = 15_000;   // Max denemeye ulaşılınca bekleme süresi (15sn)
+const SES_GUILD_ID  = config.GUILD_ID;
+const SES_KANAL_ID  = '1393552494180958258';
+const SES_YENILE_MS = 30_000;   // 30 saniyede bir kontrol
+const SES_BAGLANTI_BEKLEME = 5_000; // Kopunca yeniden bağlanma bekleme
 
 // ============================================================
-//  İÇ DURUM TAKİBİ
+//  İÇ DURUM
 // ============================================================
-let sesKanalBaglantisi  = null;   // Aktif VoiceConnection
-let yenidenDenemeCount  = 0;      // Ardışık hata sayacı
-let baglantiyiKuruyorum = false;  // Çift bağlantı önleyici kilit
-let sesKanalAktif       = true;   // Manuel durdurma bayrağı
-let baglantiZamani      = null;   // Ne zaman bağlandı
+let sesBagliMi       = false;
+let sesBaglanmaZaman = null;
+let sesYenileInterval = null;
+let sesAktif         = true;
+let sesDenemeSayisi  = 0;
 
 // ============================================================
-//  YARDIMCI — Ses kanalına bağlan
+//  YARDIMCI — Gateway üzerinden ses kanalına bağlan
+//  discord.js'in internal ws'ini kullanır
 // ============================================================
-async function sesKanalınaBaglan(guild) {
-    if (baglantiyiKuruyorum) return;
-    if (!sesKanalAktif)      return;
-
-    baglantiyiKuruyorum = true;
+function sesKanalinaBaglan() {
+    if (!sesAktif) return;
 
     try {
-        // Mevcut bağlantıyı temizle
-        const mevcutBaglanti = getVoiceConnection(guild.id);
-        if (mevcutBaglanti) {
-            mevcutBaglanti.destroy();
-            await new Promise(r => setTimeout(r, 1000));
-        }
-
-        const kanal = guild.channels.cache.get(SESKANAL_KANAL_ID);
-        if (!kanal) {
-            console.error(`[❌ SES] Kanal bulunamadı: ${SESKANAL_KANAL_ID}`);
-            baglantiyiKuruyorum = false;
+        const guild = client.guilds.cache.get(SES_GUILD_ID);
+        if (!guild) {
+            console.error('[❌ SES] Sunucu bulunamadı:', SES_GUILD_ID);
             return;
         }
 
-        // Kanal tipi kontrolü (2 = GuildVoice, 13 = Stage)
-        if (kanal.type !== 2 && kanal.type !== 13) {
-            console.error(`[❌ SES] ${kanal.name} bir ses kanalı değil!`);
-            baglantiyiKuruyorum = false;
-            return;
-        }
-
-        console.log(`[🔊 SES] "${kanal.name}" kanalına bağlanılıyor...`);
-
-        sesKanalBaglantisi = joinVoiceChannel({
-            channelId:      SESKANAL_KANAL_ID,
-            guildId:        guild.id,
-            adapterCreator: guild.voiceAdapterCreator,
-            selfDeaf:       true,   // Sağır — gereksiz ses işlemi yok
-            selfMute:       true,   // Sessiz — sadece kanalda duruyor
-        });
-
-        // Bağlantının hazır olmasını bekle
-        await entersState(sesKanalBaglantisi, VoiceConnectionStatus.Ready, 15_000);
-
-        baglantiZamani  = Date.now();
-        yenidenDenemeCount = 0;
-        baglantiyiKuruyorum = false;
-
-        console.log(`[✅ SES] "${kanal.name}" kanalına başarıyla bağlandı!`);
-
-        // ── Durum Dinleyicileri ──
-        sesKanalBaglantisi.on(VoiceConnectionStatus.Disconnected, async () => {
-            console.warn('[⚠️ SES] Bağlantı kesildi, yeniden bağlanmaya çalışılıyor...');
-
-            try {
-                // Discord'un kendi reconnect mekanizmasını dene (signalling vs ready)
-                await Promise.race([
-                    entersState(sesKanalBaglantisi, VoiceConnectionStatus.Signalling, BAGLANTI_YENILE_MS),
-                    entersState(sesKanalBaglantisi, VoiceConnectionStatus.Connecting, BAGLANTI_YENILE_MS),
-                ]);
-                // Buraya gelirse reconnect başladı, event chain devam eder
-            } catch {
-                // Otomatik reconnect olmadı — manuel yeniden bağlan
-                if (sesKanalAktif) {
-                    setTimeout(() => sesKanalYenidenBaglan(guild), BAGLANTI_YENILE_MS);
-                }
+        // Discord Gateway'e VOICE_STATE_UPDATE gönder
+        guild.shard.send({
+            op: 4, // VOICE_STATE_UPDATE opcode
+            d: {
+                guild_id:   SES_GUILD_ID,
+                channel_id: SES_KANAL_ID,
+                self_mute:  true,   // Sessiz
+                self_deaf:  true,   // Sağır
             }
         });
 
-        sesKanalBaglantisi.on(VoiceConnectionStatus.Destroyed, () => {
-            console.warn('[🔴 SES] Bağlantı yok edildi.');
-            sesKanalBaglantisi = null;
-            if (sesKanalAktif) {
-                setTimeout(() => sesKanalYenidenBaglan(guild), BAGLANTI_YENILE_MS);
-            }
-        });
+        sesBagliMi       = true;
+        sesBaglanmaZaman = Date.now();
+        sesDenemeSayisi  = 0;
 
-        sesKanalBaglantisi.on('error', err => {
-            console.error('[❌ SES] Bağlantı hatası:', err.message);
-        });
-
-        sesKanalBaglantisi.on(VoiceConnectionStatus.Ready, () => {
-            yenidenDenemeCount = 0;
-            console.log('[✅ SES] Bağlantı hazır durumda.');
-        });
+        console.log(`[✅ SES] Gateway üzerinden ses kanalına bağlanıldı: <#${SES_KANAL_ID}>`);
 
     } catch (err) {
-        console.error('[❌ SES] Bağlantı kurulamadı:', err.message);
-        baglantiyiKuruyorum = false;
+        sesBagliMi = false;
+        sesDenemeSayisi++;
+        console.error('[❌ SES] Bağlantı hatası:', err.message);
 
-        if (sesKanalAktif) {
-            setTimeout(() => sesKanalYenidenBaglan(guild), BAGLANTI_YENILE_MS);
+        // Yeniden dene
+        if (sesAktif) {
+            setTimeout(sesKanalinaBaglan, SES_BAGLANTI_BEKLEME);
         }
     }
 }
 
 // ============================================================
-//  YARDIMCI — Yeniden bağlanma (geri çekilme mantığı ile)
+//  YARDIMCI — Ses kanalından çık
 // ============================================================
-async function sesKanalYenidenBaglan(guild) {
-    if (!sesKanalAktif)      return;
-    if (baglantiyiKuruyorum) return;
+function sesKanalinadanCik() {
+    try {
+        const guild = client.guilds.cache.get(SES_GUILD_ID);
+        if (!guild) return;
 
-    yenidenDenemeCount++;
-
-    if (yenidenDenemeCount > MAX_YENIDEN_DENEME) {
-        console.warn(`[⚠️ SES] ${MAX_YENIDEN_DENEME} denemede bağlanılamadı. ${DENEME_ARALIK_MS / 1000}sn bekleniyor...`);
-        yenidenDenemeCount = 0;
-        setTimeout(() => sesKanalYenidenBaglan(guild), DENEME_ARALIK_MS);
-        return;
-    }
-
-    // Üssel geri çekilme: 5sn, 10sn, 15sn... max 60sn
-    const bekleme = Math.min(BAGLANTI_YENILE_MS * yenidenDenemeCount, 60_000);
-    console.log(`[🔄 SES] Yeniden bağlanma denemesi ${yenidenDenemeCount}/${MAX_YENIDEN_DENEME} — ${bekleme / 1000}sn sonra...`);
-
-    setTimeout(() => sesKanalInaBaglan(guild), bekleme);
-}
-
-// İsimlendirme uyumu için alias
-async function sesKanalInaBaglan(guild) {
-    return sesKanalınaBaglan(guild);
-}
-
-// ============================================================
-//  YARDIMCI — Mevcut bağlantı bilgisi
-// ============================================================
-function sesBaglantiDurumu() {
-    if (!sesKanalBaglantisi) return { bagli: false, sure: null };
-
-    const sure = baglantiZamani
-        ? Math.floor((Date.now() - baglantiZamani) / 1000)
-        : null;
-
-    return {
-        bagli:  sesKanalBaglantisi.state.status === VoiceConnectionStatus.Ready,
-        durum:  sesKanalBaglantisi.state.status,
-        sure,   // saniye cinsinden uptime
-        kanalId: SESKANAL_KANAL_ID,
-    };
-}
-
-// ============================================================
-//  READY — Bot hazır olunca ses kanalına bağlan
-// ============================================================
-client.once('ready', async () => {
-    // 3 saniye bekle (API'nin hazır olması için)
-    setTimeout(async () => {
-        try {
-            const guild = client.guilds.cache.get(SESKANAL_GUILD_ID);
-            if (!guild) {
-                console.error(`[❌ SES] Ana sunucu bulunamadı: ${SESKANAL_GUILD_ID}`);
-                return;
+        guild.shard.send({
+            op: 4,
+            d: {
+                guild_id:   SES_GUILD_ID,
+                channel_id: null, // null = kanaldan çık
+                self_mute:  false,
+                self_deaf:  false,
             }
-            await sesKanalınaBaglan(guild);
-        } catch (err) {
-            console.error('[❌ SES] İlk bağlantı hatası:', err.message);
+        });
+
+        sesBagliMi = false;
+        console.log('[🔴 SES] Ses kanalından çıkıldı.');
+    } catch (err) {
+        console.error('[❌ SES] Çıkış hatası:', err.message);
+    }
+}
+
+// ============================================================
+//  YARDIMCI — Ses kanalında gerçekten var mı kontrol et
+// ============================================================
+function sesBaglantiKontrol() {
+    if (!sesAktif) return;
+
+    try {
+        const guild = client.guilds.cache.get(SES_GUILD_ID);
+        if (!guild) return;
+
+        // Botun ses durumunu kontrol et
+        const botVoiceState = guild.voiceStates.cache.get(client.user.id);
+
+        if (!botVoiceState || botVoiceState.channelId !== SES_KANAL_ID) {
+            console.warn('[⚠️ SES] Bot ses kanalında değil, yeniden bağlanılıyor...');
+            sesBagliMi = false;
+            sesKanalinaBaglan();
+        } else {
+            // Bağlı, uptime logla (her 5 dakikada bir)
+            if (sesBaglanmaZaman && Date.now() - sesBaglanmaZaman > 0) {
+                const uptimeSn = Math.floor((Date.now() - sesBaglanmaZaman) / 1000);
+                const d = Math.floor(uptimeSn / 86400);
+                const s = Math.floor((uptimeSn % 86400) / 3600);
+                const dk = Math.floor((uptimeSn % 3600) / 60);
+                // Sadece her 10 dakikada bir logla
+                if (uptimeSn % 600 < 30) {
+                    console.log(`[🔊 SES] Ses kanalında aktif — Uptime: ${d}g ${s}s ${dk}d`);
+                }
+            }
         }
-    }, 3000);
+    } catch (err) {
+        console.error('[❌ SES] Kontrol hatası:', err.message);
+    }
+}
+
+// ============================================================
+//  READY — Bot hazır olunca bağlan
+// ============================================================
+client.once('ready', () => {
+    console.log('[🔊 SES] 7/24 Ses Sistemi başlatılıyor (Render uyumlu)...');
+
+    // 5 saniye bekle, sonra bağlan
+    setTimeout(() => {
+        sesKanalinaBaglan();
+
+        // Periyodik kontrol başlat
+        sesYenileInterval = setInterval(sesBaglantiKontrol, SES_YENILE_MS);
+    }, 5000);
 });
 
 // ============================================================
-//  VoiceStateUpdate — Bot ses kanalından atılırsa yeniden gir
+//  voiceStateUpdate — Bot atılırsa veya taşınırsa geri dön
 // ============================================================
-client.on('voiceStateUpdate', async (eskiDurum, yeniDurum) => {
+client.on('voiceStateUpdate', (eskiDurum, yeniDurum) => {
     // Sadece botun kendi ses durumunu takip et
     if (eskiDurum.member?.id !== client.user?.id) return;
-    if (eskiDurum.guild.id !== SESKANAL_GUILD_ID)   return;
+    if (eskiDurum.guild.id !== SES_GUILD_ID) return;
 
-    // Bot kanaldan ayrıldıysa (atıldıysa veya bağlantı koptuysa)
-    if (eskiDurum.channelId && !yeniDurum.channelId) {
-        console.warn('[⚠️ SES] Bot ses kanalından çıkarıldı veya bağlantı kesildi! Yeniden bağlanılıyor...');
-
-        if (!sesKanalAktif) return;
-
-        setTimeout(async () => {
-            const guild = client.guilds.cache.get(SESKANAL_GUILD_ID);
-            if (guild) await sesKanalınaBaglan(guild);
-        }, BAGLANTI_YENILE_MS);
+    // Bot kanaldan çıkarıldıysa
+    if (eskiDurum.channelId === SES_KANAL_ID && !yeniDurum.channelId) {
+        if (!sesAktif) return;
+        console.warn('[⚠️ SES] Bot ses kanalından çıkarıldı! 3sn sonra geri dönülüyor...');
+        sesBagliMi = false;
+        setTimeout(sesKanalinaBaglan, 3000);
         return;
     }
 
-    // Bot farklı bir kanala taşındıysa hedef kanala geri dön
-    if (yeniDurum.channelId && yeniDurum.channelId !== SESKANAL_KANAL_ID) {
-        console.warn(`[⚠️ SES] Bot yanlış kanala taşındı (${yeniDurum.channelId}), hedef kanala dönülüyor...`);
+    // Bot yanlış kanala taşındıysa
+    if (yeniDurum.channelId && yeniDurum.channelId !== SES_KANAL_ID) {
+        if (!sesAktif) return;
+        console.warn('[⚠️ SES] Bot yanlış kanala taşındı! 3sn sonra hedef kanala dönülüyor...');
+        sesBagliMi = false;
+        setTimeout(sesKanalinaBaglan, 3000);
+        return;
+    }
 
-        if (!sesKanalAktif) return;
-
-        setTimeout(async () => {
-            const guild = client.guilds.cache.get(SESKANAL_GUILD_ID);
-            if (guild) await sesKanalınaBaglan(guild);
-        }, 2000);
+    // Bot hedef kanala girdi
+    if (yeniDurum.channelId === SES_KANAL_ID) {
+        sesBagliMi = true;
+        if (!sesBaglanmaZaman) sesBaglanmaZaman = Date.now();
+        console.log('[✅ SES] Bot ses kanalında doğrulandı.');
     }
 });
 
 // ============================================================
-//  PERİYODİK KONTROL — Her 2 dakikada bağlantıyı doğrula
+//  shardDisconnect / shardReconnecting — Bağlantı kopunca
 // ============================================================
-setInterval(async () => {
-    if (!sesKanalAktif) return;
+client.on('shardDisconnect', () => {
+    sesBagliMi = false;
+    console.warn('[⚠️ SES] Shard bağlantısı kesildi, yeniden bağlanmada ses kanalı yenilenecek...');
+});
 
-    const { bagli } = sesBaglantiDurumu();
-
-    if (!bagli) {
-        console.warn('[🔄 SES] Periyodik kontrol: Bağlantı yok, yeniden bağlanılıyor...');
-        const guild = client.guilds.cache.get(SESKANAL_GUILD_ID);
-        if (guild && !baglantiyiKuruyorum) {
-            await sesKanalınaBaglan(guild);
-        }
-    }
-
-}, 2 * 60 * 1000); // 2 dakika
+client.on('shardResume', () => {
+    console.log('[🔄 SES] Shard yeniden bağlandı, ses kanalı yenileniyor...');
+    setTimeout(sesKanalinaBaglan, 3000);
+});
 
 // ============================================================
-//  /ses-durum KOMUTU — Ses kanalı bağlantı durumunu göster
+//  KOMUTLAR
 //
-//  commands[] dizisine şunu ekle:
+//  commands[] dizisine şunları ekle:
 //
 //  new SlashCommandBuilder()
 //      .setName('ses-durum')
@@ -3963,146 +3904,110 @@ setInterval(async () => {
 //
 //  new SlashCommandBuilder()
 //      .setName('ses-durdur')
-//      .setDescription('Botun ses kanalı bağlantısını durdurur. (Yetkili)'),
+//      .setDescription('Botu ses kanalından çıkarır. (Yetkili)'),
 //
 //  new SlashCommandBuilder()
 //      .setName('ses-baslat')
-//      .setDescription('Botun ses kanalı bağlantısını yeniden başlatır. (Yetkili)'),
+//      .setDescription('Botu ses kanalına yeniden bağlar. (Yetkili)'),
 // ============================================================
 
-client.on('interactionCreate', async sesInteraction => {
-    if (!sesInteraction.isChatInputCommand()) return;
+client.on('interactionCreate', async sesInt => {
+    if (!sesInt.isChatInputCommand()) return;
 
     const sesKomutlar = ['ses-durum', 'ses-yenile', 'ses-durdur', 'ses-baslat'];
-    if (!sesKomutlar.includes(sesInteraction.commandName)) return;
+    if (!sesKomutlar.includes(sesInt.commandName)) return;
 
-    // ── /ses-durum — Herkese açık ──
-    if (sesInteraction.commandName === 'ses-durum') {
-        const { bagli, durum, sure, kanalId } = sesBaglantiDurumu();
+    // /ses-durum — herkese açık
+    if (sesInt.commandName === 'ses-durum') {
+        const guild = client.guilds.cache.get(SES_GUILD_ID);
+        const botVoiceState = guild?.voiceStates.cache.get(client.user.id);
+        const gercektenBagli = botVoiceState?.channelId === SES_KANAL_ID;
 
-        let sureMesaj = 'Bilinmiyor';
-        if (sure !== null) {
-            const g = Math.floor(sure / 86400);
-            const s = Math.floor((sure % 86400) / 3600);
-            const d = Math.floor((sure % 3600) / 60);
-            const sn = sure % 60;
-            sureMesaj = [
-                g > 0 ? `${g}g` : '',
-                s > 0 ? `${s}s` : '',
-                d > 0 ? `${d}d` : '',
-                `${sn}sn`
-            ].filter(Boolean).join(' ');
+        let uptimeStr = 'Bilinmiyor';
+        if (sesBaglanmaZaman && gercektenBagli) {
+            const sn = Math.floor((Date.now() - sesBaglanmaZaman) / 1000);
+            const g  = Math.floor(sn / 86400);
+            const s  = Math.floor((sn % 86400) / 3600);
+            const d  = Math.floor((sn % 3600) / 60);
+            const sc = sn % 60;
+            uptimeStr = [g > 0 ? `${g}g` : '', s > 0 ? `${s}s` : '', d > 0 ? `${d}d` : '', `${sc}sn`].filter(Boolean).join(' ');
         }
 
         const embed = new EmbedBuilder()
-            .setColor(bagli ? '#00FF88' : '#FF4444')
-            .setTitle(`${bagli ? '🟢' : '🔴'} 7/24 Ses Kanalı Durumu`)
+            .setColor(gercektenBagli ? '#00FF88' : '#FF4444')
+            .setTitle(`${gercektenBagli ? '🟢' : '🔴'} 7/24 Ses Kanalı Durumu`)
             .addFields(
-                { name: '📡 Bağlantı', value: bagli ? '✅ Bağlı' : '❌ Bağlı Değil', inline: true },
-                { name: '🎙️ Kanal', value: kanalId ? `<#${kanalId}>` : 'Bilinmiyor', inline: true },
-                { name: '⏱️ Uptime', value: sureMesaj, inline: true },
-                { name: '🔄 Deneme Sayısı', value: String(yenidenDenemeCount), inline: true },
-                { name: '🔒 Sistem Aktif', value: sesKanalAktif ? '✅ Evet' : '⏸️ Durduruldu', inline: true },
-                { name: '📊 Durum Kodu', value: `\`${durum || 'N/A'}\``, inline: true },
+                { name: '📡 Bağlantı',      value: gercektenBagli ? '✅ Bağlı' : '❌ Bağlı Değil', inline: true },
+                { name: '🎙️ Kanal',         value: `<#${SES_KANAL_ID}>`, inline: true },
+                { name: '⏱️ Uptime',        value: uptimeStr, inline: true },
+                { name: '🔒 Sistem',        value: sesAktif ? '✅ Aktif' : '⏸️ Durduruldu', inline: true },
+                { name: '🔄 Deneme',        value: String(sesDenemeSayisi), inline: true },
+                { name: '🌐 Platform',      value: 'Render (Gateway Modu)', inline: true },
             )
             .setTimestamp()
-            .setFooter({ text: 'Eko Yıldız | 7/24 Ses Sistemi' });
+            .setFooter({ text: 'Eko Yıldız | 7/24 Ses Sistemi v2.0 (Render Uyumlu)' });
 
-        return sesInteraction.reply({ embeds: [embed], flags: 64 });
+        return sesInt.reply({ embeds: [embed], flags: 64 });
     }
 
-    // Diğer komutlar için yetki kontrolü
-    const hasRole = sesInteraction.member?.roles?.cache?.has(config.REQUIRED_ROLE_ID);
+    // Yetkili kontrolü
+    const hasRole = sesInt.member?.roles?.cache?.has(config.REQUIRED_ROLE_ID);
     if (!hasRole) {
-        return sesInteraction.reply({ content: '❌ Bu komutu kullanmak için **Yetkili** rolüne sahip olmanız gerekiyor!', flags: 64 });
+        return sesInt.reply({ content: '❌ Bu komutu kullanmak için **Yetkili** rolüne sahip olmanız gerekiyor!', flags: 64 });
     }
 
-    // ── /ses-yenile ──
-    if (sesInteraction.commandName === 'ses-yenile') {
-        await sesInteraction.deferReply({ flags: 64 });
+    if (sesInt.commandName === 'ses-yenile') {
+        sesAktif = true;
+        sesKanalinaBaglan();
 
-        sesKanalAktif = true;
-        const guild = client.guilds.cache.get(SESKANAL_GUILD_ID);
-        if (!guild) return sesInteraction.editReply('❌ Ana sunucu bulunamadı.');
-
-        baglantiyiKuruyorum = false;
-        await sesKanalınaBaglan(guild);
-
-        const { bagli } = sesBaglantiDurumu();
         const embed = new EmbedBuilder()
-            .setColor(bagli ? '#00FF88' : '#FF4444')
+            .setColor('#00FF88')
             .setTitle('🔄 Ses Bağlantısı Yenilendi')
             .addFields(
-                { name: '📡 Sonuç', value: bagli ? '✅ Başarıyla bağlandı' : '❌ Bağlanamadı, tekrar deneniyor...', inline: true },
-                { name: '🎙️ Kanal', value: `<#${SESKANAL_KANAL_ID}>`, inline: true },
-                { name: '👮 Yetkili', value: sesInteraction.user.tag, inline: true },
+                { name: '🎙️ Kanal',   value: `<#${SES_KANAL_ID}>`, inline: true },
+                { name: '👮 Yetkili', value: sesInt.user.tag, inline: true },
             )
             .setTimestamp()
             .setFooter({ text: 'Eko Yıldız | 7/24 Ses Sistemi' });
 
-        return sesInteraction.editReply({ embeds: [embed] });
+        return sesInt.reply({ embeds: [embed], flags: 64 });
     }
 
-    // ── /ses-durdur ──
-    if (sesInteraction.commandName === 'ses-durdur') {
-        sesKanalAktif = false;
-
-        const mevcutBaglanti = getVoiceConnection(SESKANAL_GUILD_ID);
-        if (mevcutBaglanti) mevcutBaglanti.destroy();
-        sesKanalBaglantisi = null;
+    if (sesInt.commandName === 'ses-durdur') {
+        sesAktif = false;
+        sesKanalinadanCik();
 
         const embed = new EmbedBuilder()
             .setColor('#FF4444')
             .setTitle('⏸️ Ses Sistemi Durduruldu')
-            .setDescription('Bot ses kanalından çıktı ve sistem duraklatıldı.\n`/ses-baslat` komutuyla yeniden başlatabilirsin.')
-            .addFields(
-                { name: '👮 Yetkili', value: sesInteraction.user.tag, inline: true },
-            )
+            .setDescription('`/ses-baslat` komutuyla yeniden başlatabilirsin.')
+            .addFields({ name: '👮 Yetkili', value: sesInt.user.tag, inline: true })
             .setTimestamp()
             .setFooter({ text: 'Eko Yıldız | 7/24 Ses Sistemi' });
 
-        await sesInteraction.reply({ embeds: [embed] });
-
-        // Log kanalına bildir
-        if (config.LOG_CHANNEL_ID) {
-            try {
-                const logKanal = await client.channels.fetch(config.LOG_CHANNEL_ID).catch(() => null);
-                if (logKanal) await logKanal.send({ embeds: [embed] });
-            } catch { }
-        }
-        return;
+        return sesInt.reply({ embeds: [embed] });
     }
 
-    // ── /ses-baslat ──
-    if (sesInteraction.commandName === 'ses-baslat') {
-        sesKanalAktif = true;
-        yenidenDenemeCount = 0;
-        baglantiyiKuruyorum = false;
+    if (sesInt.commandName === 'ses-baslat') {
+        sesAktif = true;
+        sesDenemeSayisi = 0;
+        sesKanalinaBaglan();
 
-        await sesInteraction.deferReply({ flags: 64 });
-
-        const guild = client.guilds.cache.get(SESKANAL_GUILD_ID);
-        if (!guild) return sesInteraction.editReply('❌ Ana sunucu bulunamadı.');
-
-        await sesKanalınaBaglan(guild);
-
-        const { bagli } = sesBaglantiDurumu();
         const embed = new EmbedBuilder()
-            .setColor(bagli ? '#00FF88' : '#FFA500')
+            .setColor('#00FF88')
             .setTitle('▶️ Ses Sistemi Başlatıldı')
             .addFields(
-                { name: '📡 Bağlantı', value: bagli ? '✅ Bağlandı' : '🔄 Bağlanmaya çalışılıyor...', inline: true },
-                { name: '🎙️ Kanal', value: `<#${SESKANAL_KANAL_ID}>`, inline: true },
-                { name: '👮 Yetkili', value: sesInteraction.user.tag, inline: true },
+                { name: '🎙️ Kanal',   value: `<#${SES_KANAL_ID}>`, inline: true },
+                { name: '👮 Yetkili', value: sesInt.user.tag, inline: true },
             )
             .setTimestamp()
             .setFooter({ text: 'Eko Yıldız | 7/24 Ses Sistemi' });
 
-        return sesInteraction.editReply({ embeds: [embed] });
+        return sesInt.reply({ embeds: [embed], flags: 64 });
     }
 });
 
-console.log('[🔊 SES] 7/24 Ses Kanalı Sistemi yüklendi.');
+console.log('[🔊 SES] 7/24 Ses Sistemi (Render Uyumlu - Gateway Modu) yüklendi.');
 
 // ============================================================
 //  BAŞLATMA
