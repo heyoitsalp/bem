@@ -3158,7 +3158,7 @@ const cevapHavuzu = {
 // ============================================================
 const ozelDurumlar = [
     {
-        regex: /\b(yorgunum|çok yoruldum|yoruldum|bitik|bitiktim)\b/i,
+        regex: /\b(test1)\b/i,
         cevaplar: [
             (u) => `Aww ${u}, biraz dinlen! 😔 Kendin iyi bak, sen değerlisin!`,
             (u) => `Hadi ${u}, bir mola ver! ☕ Çay ya da kahve iç, dinlen biraz.`,
@@ -3166,7 +3166,7 @@ const ozelDurumlar = [
         ]
     },
     {
-        regex: /\b(mutluyum|çok mutluyum|harikayım|süperim|mükemmelim|harika hissediyorum)\b/i,
+        regex: /\b(test2)\b/i,
         cevaplar: [
             (u) => `Waa, mutlu ${u} mutlu! 🎉 Bu enerjin hiç gitmesin!`,
             (u) => `Süper ${u}! 🌟 Mutluluğun bu sunucuya da yansıyor, iyi ki varsın!`,
@@ -3190,7 +3190,7 @@ const ozelDurumlar = [
         ]
     },
     {
-        regex: /\b(teşekkürler?|teşekkür ederim|sağ ol|sağolasın|eyw|eyv)\b/i,
+        regex: /\b(test4)\b/i,
         cevaplar: [
             (u) => `Rica ederim ${u}! 😊 Her zaman buradayım!`,
             (u) => `Ne demek ${u}, her zaman! 🌟`,
