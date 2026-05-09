@@ -52,7 +52,7 @@ const rankList = [
     { name: "Yönetim Kurulu Başkanı",             id: 36  },
     { name: "Contributor",                        id: 37  },
     { name: "Geliştirme Ekibi",                   id: 250 },
-    { name: "Vali",                               id: 252 },
+    { name: "Başkan",                             id: 252 },
     { name: "Cumhurbaşkanı",                      id: 254 },
     { name: "Proje Uygulaması",                   id: 255 }
 ];
