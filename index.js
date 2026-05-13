@@ -5,57 +5,49 @@ const {
     TextInputStyle, AuditLogEvent, Collection
 } = require('discord.js');
 const { status, startApi } = require('./api');
-const config = require('./config.json');
 
 // ============================================================
-//  ROBLOX GRUP VE API AYARLARI
+//  IMPORT MODULES
 // ============================================================
-const ROBLOX_GROUP_ID = 8505535;
-const ROBLOX_COOKIE = (process.env.ROBLOX_COOKIE || '').trim(); // Render'da environment variable olarak ekle
+const {
+    config, rankList, ROBLOX_COOKIE, ROBLOX_GROUP_ID,
+    colorMap, iconMap, titleMap,
+    EKO_GUILD_ID, EKO_KANAL_ID, EKO_ROL_ID,
+    KAYIT_GUILD_ID, KAYIT_KANAL_ID, KAYIT_KARSILAMA_ICERIK,
+    HG_GUILD_ID, HG_KANAL_ID, HG_ULER_ROL_ID, SELAMLAMA_COOLDOWN_MS,
+    YOUTUBE_ABONE_LINK, YOUTUBE_UYE_LINK,
+    KAYIT_COOLDOWN_MS, KAYIT_RANK_ID, KAYIT_DISCORD_ROL_ID
+} = require('./modules/constants');
 
-// ============================================================
-//  RÜTBE LİSTESİ — Grup ID: 8505535 (Guest hariç tümü)
-// ============================================================
-const rankList = [
-    { name: "Polis",                              id: 1   },
-    { name: "Akademi Adayı",                      id: 2   },
-    { name: "Akademi",                            id: 3   },
-    { name: "Polis Memuru Adayı",                 id: 6   },
-    { name: "Polis Memuru",                       id: 7   },
-    { name: "Kıdemli Polis Memuru",               id: 8   },
-    { name: "Başpolis Memuru Adayı",              id: 9   },
-    { name: "Başpolis Memuru",                    id: 10  },
-    { name: "Kıdemli Başpolis Memuru",            id: 11  },
-    { name: "Uzm. Başpolis Memuru",               id: 12  },
-    { name: "Aday Komiser",                       id: 13  },
-    { name: "Emekli Personel",                    id: 14  },
-    { name: "Stajyer Komiser",                    id: 15  },
-    { name: "Komiser Yardımcısı",                 id: 16  },
-    { name: "Askomiser",                          id: 17  },
-    { name: "Komiser",                            id: 18  },
-    { name: "Üskomiser",                          id: 19  },
-    { name: "Başkomiser",                         id: 20  },
-    { name: "Amir Adayı",                         id: 21  },
-    { name: "Emniyet Amiri",                      id: 22  },
-    { name: "Müdür",                              id: 23  },
-    { name: "4. Sınıf Emniyet Müdürü",            id: 24  },
-    { name: "3. Sınıf Emniyet Müdürü",            id: 25  },
-    { name: "2. Sınıf Emniyet Müdürü",            id: 26  },
-    { name: "1. Sınıf Emniyet Müdürü",            id: 27  },
-    { name: "Emniyet Genel Müdürü",               id: 28  },
-    { name: "Teftiş Kurulu",                      id: 29  },
-    { name: "Teftiş Kurulu Başkan Yardımcısı",    id: 30  },
-    { name: "Teftiş Kurulu Başkanı",              id: 31  },
-    { name: "Yüksek Polis Kurulu",                id: 32  },
-    { name: "Yönetim Kurulu",                     id: 33  },
-    { name: "Yönetim Kurulu Başkan Yardımcısı",   id: 34  },
-    { name: "Yönetim Kurulu Başkanı",             id: 36  },
-    { name: "Contributor",                        id: 37  },
-    { name: "Geliştirme Ekibi",                   id: 250 },
-    { name: "Başkan",                             id: 252 },
-    { name: "Cumhurbaşkanı",                      id: 254 },
-    { name: "Proje Uygulaması",                   id: 255 }
-];
+const {
+    getRobloxUser, getRobloxUserById, getUserRankInGroup, getGroupMemberCount,
+    getGroupRoles, getRoleIdByRank, getCsrfToken, setRobloxRank,
+    kayitGetirGrupRolleri, kayitGetirRoleId, kayitGruptaMi,
+    kayitKaydRobloxKullanici, kayitSetRobloxRank
+} = require('./modules/robloxApi');
+
+const {
+    warnDatabase, modlogDatabase, tempbanDatabase, tempmuteDatabase,
+    pollVotes, unbanRequests,
+    addModCase, getUserWarnings, addWarning, removeWarning,
+    parseDuration, formatDuration, checkExpiredPunishments
+} = require('./modules/moderationUtils');
+
+const {
+    buildModEmbed, buildDMEmbed, sendDM, sendLog,
+    ekoLogEmbed, ekoAboneDMEmbed, ekoKanalTebrikEmbed,
+    kayitBasariliEmbed, kayitHataEmbed, kayitUyariEmbed
+} = require('./modules/embedBuilders');
+
+const {
+    selamlamaCooldown, kullaniciRuhuHali, hgIstatistik,
+    selamlamaDesenleri, cevapHavuzu,
+    rastgeleCevap, hgGunlukSifirla, hesapGuvenligiHesapla,
+    katilimRozeti, haftaninGunu, sirayaGoreRenk,
+    ekoFotografVarMi, ekoGuncelleIstatistik
+} = require('./modules/utilities');
+
+// NOTE: All constants are now imported from modules/constants.js
 
 // ============================================================
 //  IN-MEMORY DEPOLAMA (aktif warn/uyarı/unban talepleri vb.)
