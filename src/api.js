@@ -44,6 +44,7 @@ app.post('/api/oc-playerlist', (req, res) => {
 
 app.post('/update-adalet', (req, res) => {
     const { status: newStatus } = req.body;
+    
     if (typeof newStatus === 'boolean') {
         status.isAdaletSarayOpen = newStatus;
         res.json({ success: true, current: status.isAdaletSarayOpen });
