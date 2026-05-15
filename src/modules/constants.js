@@ -155,5 +155,7 @@ module.exports = {
     YOUTUBE_UYE_LINK,
     colorMap,
     iconMap,
-    titleMap
+    titleMap,
+    ROBLOX_API_KEY: config.ROBLOX_API_KEY,
+    UNIVERSE_ID: config.UNIVERSE_ID
 };
