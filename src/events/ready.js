@@ -3,6 +3,7 @@ const { rankList, ROBLOX_COOKIE, config } = require('../modules/constants');
 const { getGroupRoles } = require('../modules/robloxApi');
 const { checkExpiredPunishments } = require('../modules/moderationUtils');
 const scheduler = require('../modules/scheduler');
+const { deployCommands } = require('../modules/commandDeployer');
 
 module.exports = {
     name: Events.ClientReady,
@@ -11,6 +12,9 @@ module.exports = {
         console.log(`[🤖] ${client.user.tag} olarak giriş yapıldı!`);
         console.log(`[📊] ${client.guilds.cache.size} sunucuda aktif.`);
         console.log(`[📋] ${rankList.length} rütbe yüklendi.`);
+        
+        // Komutları otomatik kaydet
+        await deployCommands();
         
         client.user.setActivity('Sentura 🦸 ekoyildiz | /yardim', { type: 4 });
 

@@ -2,7 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { addModCase, parseDuration, formatDuration } = require('../../modules/moderationUtils');
 const { buildDMEmbed, buildModEmbed, sendDM, sendLog } = require('../../modules/embedBuilders');
 const { config } = require('../../modules/constants');
-const { JsonDatabase } = require('../../modules/jsonDatabase');
+const JsonDatabase = require('../../modules/jsonDatabase');
 
 const tempmuteDatabase = new JsonDatabase('tempmutes.json');
 
