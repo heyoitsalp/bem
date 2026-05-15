@@ -17,6 +17,18 @@ module.exports = {
         const eslesen = selamlamaDesenleri.find(d => d.regex.test(icerik));
         if (!eslesen) return;
 
+        // "iyiyim" cevabı için sadece bota yanıt (reply) verdiyse çalışsın
+        if (eslesen.tip === 'iyiyim') {
+            if (!message.reference || !message.reference.messageId) return;
+            
+            try {
+                const repliedMessage = await message.channel.messages.fetch(message.reference.messageId);
+                if (!repliedMessage || repliedMessage.author.id !== client.user.id) return;
+            } catch {
+                return;
+            }
+        }
+
         // Cooldown kontrolü
         const cooldownKey = `${message.author.id}_${message.channelId}`;
         const sonSelam = selamlamaCooldown.get(cooldownKey);

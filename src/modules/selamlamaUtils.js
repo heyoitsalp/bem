@@ -13,6 +13,7 @@ const selamlamaDesenleri = [
     { regex: /\b(iyi bayramlar?|hay[ıi]rl[ıi] bayramlar?|bayram[ıi]n[ıi]z mübarek)\b/i, tip: 'iyi bayramlar', emoji: '🎉' },
     { regex: /\b(ho[sş] geldin|ho[sş] bulduk|ho[sş] geldiniz)\b/i, tip: 'hoş geldin', emoji: '🎊' },
     { regex: /\b(görü[sş]ürüz|g[oö]r[uü][sş]r[uü]z|güle güle|g\.g\.?|bb|byebye|bye|bby|hoşça kal|ho[sş][cç]a kal)\b/i, tip: 'görüşürüz', emoji: '👋' },
+    { regex: /\b(iyiyim|iyi|süperim|s[uü]per|iyidir|[cç]ok [sş][uü]k[uü]r|bomba gibiyim)\b/i, tip: 'iyiyim', emoji: '✨' },
 ];
 
 const cevapHavuzu = {
@@ -77,6 +78,12 @@ const cevapHavuzu = {
         (u) => `Görüşürüz ${u}! 👋 İyi günler dilerim!`,
         (u) => `Güle güle ${u}! 😊 Yakında görüşmek üzere!`,
     ],
+    'iyiyim': [
+        (u) => `Mükemmel! Hep iyi ol ${u}! ✨`,
+        (u) => `Harika! Duyduğuma sevindim ${u}. Hep böyle neşeli kal! 😊`,
+        (u) => `Süper! Senin iyi olman beni de mutlu etti ${u}! 🌟`,
+        (u) => `Hep iyi ol ${u}! Nazar değmesin 🧿`,
+    ]
 };
 
 function rastgeleCevap(havuz, kullaniciAdi) {
