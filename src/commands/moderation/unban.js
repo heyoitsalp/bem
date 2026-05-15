@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { addModCase } = require('../../modules/moderationUtils');
 const { buildDMEmbed, buildModEmbed, sendDM, sendLog } = require('../../modules/embedBuilders');
-const { JsonDatabase } = require('../../modules/jsonDatabase');
+const JsonDatabase = require('../../modules/jsonDatabase');
 
 // tempban veritabanına erişim gerekebilir
 const tempbanDatabase = new JsonDatabase('tempbans.json');
