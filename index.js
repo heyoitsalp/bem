@@ -30,7 +30,7 @@ const {
     warnDatabase, modlogDatabase, tempbanDatabase, tempmuteDatabase,
     pollVotes, unbanRequests,
     addModCase, getUserWarnings, addWarning, removeWarning,
-    parseDuration, formatDuration, checkExpiredPunishments
+    parseDuration, formatDuration
 } = require('./modules/moderationUtils');
 
 const {
