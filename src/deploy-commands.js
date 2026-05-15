@@ -5,10 +5,22 @@ const path = require('path');
 
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+const getFilesRecursively = (dir) => {
+    let files = [];
+    fs.readdirSync(dir).forEach(file => {
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+            files = files.concat(getFilesRecursively(fullPath));
+        } else if (file.endsWith('.js')) {
+            files.push(fullPath);
+        }
+    });
+    return files;
+};
 
-for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
+const commandFiles = getFilesRecursively(commandsPath);
+
+for (const filePath of commandFiles) {
     const command = require(filePath);
     if ('data' in command && 'execute' in command) {
         commands.push(command.data.toJSON());

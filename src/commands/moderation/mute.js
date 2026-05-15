@@ -1,8 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { addModCase } = require('../modules/moderationUtils');
-const { buildDMEmbed, buildModEmbed } = require('../modules/embedBuilders');
-const { sendDM, sendLog } = require('../modules/embedBuilders');
-const { config } = require('../modules/constants');
+const { addModCase } = require('../../modules/moderationUtils');
+const { buildDMEmbed, buildModEmbed, sendDM, sendLog } = require('../../modules/embedBuilders');
+const { config } = require('../../modules/constants');
 
 module.exports = {
     data: new SlashCommandBuilder()

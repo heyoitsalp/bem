@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { getRobloxUser, getUserRankInGroup, setRobloxRank } = require('../modules/robloxApi');
-const { rankList, colorMap } = require('../modules/constants');
-const { buildModEmbed, sendLog } = require('../modules/embedBuilders');
+const { getRobloxUser, getUserRankInGroup, setRobloxRank } = require('../../modules/robloxApi');
+const { rankList, colorMap } = require('../../modules/constants');
+const { buildModEmbed, sendLog } = require('../../modules/embedBuilders');
 
 module.exports = {
     data: new SlashCommandBuilder()
