@@ -4,19 +4,19 @@ const { buildModEmbed, sendLog } = require('../../modules/embedBuilders');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('oyun-yonet')
-        .setDescription('Roblox oyun girişlerini açar veya kapatır.')
+        .setName('market-yonet')
+        .setDescription('Rütbe marketini açar veya kapatır.')
         .addBooleanOption(opt => opt.setName('durum').setDescription('Açık mı?').setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     async execute(interaction, client) {
         const durum = interaction.options.getBoolean('durum');
-        status.isGameOpen = durum;
+        status.isMarketOpen = durum;
 
         const embed = buildModEmbed(
-            durum ? '🟢 Oyun Girişleri Açıldı' : '🔴 Oyun Girişleri Kapatıldı',
+            durum ? '🟢 Market Açıldı' : '🔴 Market Kapatıldı',
             durum ? '#00FF00' : '#FF0000',
             [
-                { name: '🎮 Sistem', value: 'Roblox Oyun Erişimi', inline: true },
+                { name: '🛒 Sistem', value: 'Rütbe Marketi', inline: true },
                 { name: '📊 Durum', value: durum ? '**AÇIK**' : '**KAPALI**', inline: true },
                 { name: '👮 İşlemi Yapan', value: interaction.user.tag, inline: true }
             ]

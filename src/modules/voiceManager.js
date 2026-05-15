@@ -3,42 +3,45 @@ const { config } = require('./constants');
 class VoiceManager {
     constructor(client) {
         this.client = client;
+        this.SES_GUILD_ID = config.GUILD_ID;
+        this.SES_KANAL_ID = '1367646465492258847';
+        this.SES_YENILE_MS = 60000;
+        
         this.sesAktif = true;
         this.sesBagliMi = false;
-        this.sesDenemeSayisi = 0;
         this.sesBaglanmaZaman = null;
-        this.SES_KANAL_ID = config.VOICE_CHANNEL_ID;
-        this.SES_GUILD_ID = config.GUILD_ID;
-        this.SES_YENILE_MS = 300000; // 5 dakika
+        this.sesDenemeSayisi = 0;
     }
 
-    async connect() {
-        if (!this.sesAktif || !this.SES_KANAL_ID) return;
-
+    connect() {
+        if (!this.sesAktif) return;
+        
         try {
             const guild = this.client.guilds.cache.get(this.SES_GUILD_ID);
-            if (!guild) return console.error('[❌ SES] Sunucu bulunamadı.');
+            if (!guild) return;
+
+            this.sesDenemeSayisi++;
+            console.log(`[🔊 SES] Ses kanalına bağlanma denemesi #${this.sesDenemeSayisi}...`);
 
             guild.shard.send({
                 op: 4,
                 d: {
-                    guild_id: this.SES_GUILD_ID,
+                    guild_id:   this.SES_GUILD_ID,
                     channel_id: this.SES_KANAL_ID,
-                    self_mute: false,
-                    self_deaf: true,
+                    self_mute:  false,
+                    self_deaf:  false,
                 }
             });
 
             this.sesBagliMi = true;
-            this.sesDenemeSayisi++;
             if (!this.sesBaglanmaZaman) this.sesBaglanmaZaman = Date.now();
-            console.log(`[🔊 SES] Ses kanalına bağlanma isteği gönderildi. Deneme: ${this.sesDenemeSayisi}`);
         } catch (err) {
             console.error('[❌ SES] Bağlantı hatası:', err.message);
+            this.sesBagliMi = false;
         }
     }
 
-    async disconnect() {
+    disconnect() {
         try {
             const guild = this.client.guilds.cache.get(this.SES_GUILD_ID);
             if (!guild) return;
@@ -46,15 +49,14 @@ class VoiceManager {
             guild.shard.send({
                 op: 4,
                 d: {
-                    guild_id: this.SES_GUILD_ID,
+                    guild_id:   this.SES_GUILD_ID,
                     channel_id: null,
-                    self_mute: false,
-                    self_deaf: false,
+                    self_mute:  false,
+                    self_deaf:  false,
                 }
             });
 
             this.sesBagliMi = false;
-            this.sesAktif = false;
             console.log('[🔴 SES] Ses kanalından çıkıldı.');
         } catch (err) {
             console.error('[❌ SES] Çıkış hatası:', err.message);
@@ -74,6 +76,16 @@ class VoiceManager {
                 console.warn('[⚠️ SES] Bot ses kanalında değil, yeniden bağlanılıyor...');
                 this.sesBagliMi = false;
                 this.connect();
+            } else {
+                if (this.sesBaglanmaZaman) {
+                    const uptimeSn = Math.floor((Date.now() - this.sesBaglanmaZaman) / 1000);
+                    if (uptimeSn % 600 < 60) {
+                        const d = Math.floor(uptimeSn / 86400);
+                        const s = Math.floor((uptimeSn % 86400) / 3600);
+                        const dk = Math.floor((uptimeSn % 3600) / 60);
+                        console.log(`[🔊 SES] Ses kanalında aktif — Uptime: ${d}g ${s}s ${dk}d`);
+                    }
+                }
             }
         } catch (err) {
             console.error('[❌ SES] Kontrol hatası:', err.message);
@@ -82,10 +94,12 @@ class VoiceManager {
 
     getStatus() {
         return {
-            active: this.sesAktif,
-            connected: this.sesBagliMi,
-            attempts: this.sesDenemeSayisi,
-            uptime: this.sesBaglanmaZaman ? Date.now() - this.sesBaglanmaZaman : 0
+            sesAktif: this.sesAktif,
+            sesBagliMi: this.sesBagliMi,
+            sesBaglanmaZaman: this.sesBaglanmaZaman,
+            sesDenemeSayisi: this.sesDenemeSayisi,
+            SES_KANAL_ID: this.SES_KANAL_ID,
+            SES_GUILD_ID: this.SES_GUILD_ID
         };
     }
 }

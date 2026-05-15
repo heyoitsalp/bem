@@ -1,5 +1,6 @@
-const { EmbedBuilder, ButtonStyle, ButtonBuilder, ActionRowBuilder } = require('discord.js');
-const { pollVotes } = require('./moderationUtils');
+const { EmbedBuilder } = require('discord.js');
+
+const pollVotes = new Map(); // messageId -> { yes: Set, no: Set }
 
 async function handleButtonInteraction(interaction, client) {
     const { customId, message } = interaction;

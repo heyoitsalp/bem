@@ -4,19 +4,19 @@ const { buildModEmbed, sendLog } = require('../../modules/embedBuilders');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('oyun-yonet')
-        .setDescription('Roblox oyun girişlerini açar veya kapatır.')
+        .setName('adaletsarayi-yonet')
+        .setDescription('Adalet Sarayını açar veya kapatır.')
         .addBooleanOption(opt => opt.setName('durum').setDescription('Açık mı?').setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     async execute(interaction, client) {
         const durum = interaction.options.getBoolean('durum');
-        status.isGameOpen = durum;
+        status.isAdaletSarayOpen = durum;
 
         const embed = buildModEmbed(
-            durum ? '🟢 Oyun Girişleri Açıldı' : '🔴 Oyun Girişleri Kapatıldı',
+            durum ? '🟢 Adalet Sarayı Açıldı' : '🔴 Adalet Sarayı Kapatıldı',
             durum ? '#00FF00' : '#FF0000',
             [
-                { name: '🎮 Sistem', value: 'Roblox Oyun Erişimi', inline: true },
+                { name: '⚖️ Sistem', value: 'Adalet Sarayı', inline: true },
                 { name: '📊 Durum', value: durum ? '**AÇIK**' : '**KAPALI**', inline: true },
                 { name: '👮 İşlemi Yapan', value: interaction.user.tag, inline: true }
             ]

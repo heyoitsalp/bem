@@ -27,5 +27,9 @@ module.exports = {
 
         // Geçici ban/mute kontrolü - her dakika çalışır
         scheduler.addTask('punishment-expiry-check', () => checkExpiredPunishments(client, config), 60000);
+
+        // Kayıt karşılama mesajını kontrol et
+        const { kayitKarsilamaMesajiniGonder } = require('../modules/kayitUtils');
+        setTimeout(() => kayitKarsilamaMesajiniGonder(client), 3000);
     },
 };

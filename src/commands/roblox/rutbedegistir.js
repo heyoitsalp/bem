@@ -5,12 +5,19 @@ const { buildModEmbed, sendLog } = require('../../modules/embedBuilders');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('terfi')
-        .setDescription('Kullanıcıyı bir üst rütbeye terfi ettirir.')
+        .setName('rutbedegistir')
+        .setDescription('Kullanıcıya listeden bir rütbe atar.')
         .addStringOption(opt => opt.setName('roblox_adi').setDescription('Roblox kullanıcı adı').setRequired(true))
+        .addIntegerOption(opt => opt.setName('rutbe_id').setDescription('Atanacak rütbeyi listeden seçin').setRequired(true).setAutocomplete(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+    async autocomplete(interaction) {
+        const focusedValue = interaction.options.getFocused();
+        const filtered = rankList.filter(r => r.name.toLowerCase().includes(focusedValue.toLowerCase()));
+        await interaction.respond(filtered.slice(0, 25).map(r => ({ name: r.name, value: r.id })));
+    },
     async execute(interaction, client) {
         const username = interaction.options.getString('roblox_adi');
+        const requestedId = interaction.options.getInteger('rutbe_id');
         await interaction.deferReply();
 
         try {
@@ -22,19 +29,17 @@ module.exports = {
                 return interaction.editReply(`❌ **${robloxUser.name}** emniyet grubumuzda bulunmuyor.`);
             }
 
-            const currentIndex = rankList.findIndex(r => r.id === currentRankData.rank);
-            if (currentIndex === -1 || currentIndex >= rankList.length - 1) {
-                return interaction.editReply(`❌ Kullanıcı daha fazla terfi ettirilemez (en üst rütbede).`);
-            }
+            const newRankObj = rankList.find(r => r.id === requestedId);
+            if (!newRankObj) return interaction.editReply(`❌ Geçersiz rütbe ID'si seçildi.`);
 
-            const newRankObj = rankList[currentIndex + 1];
-            const oldRankObj = rankList[currentIndex] || { name: currentRankData.name };
-
+            const oldRankObj = rankList.find(r => r.id === currentRankData.rank) || { name: currentRankData.name };
             await setRobloxRank(robloxUser.id, newRankObj.id);
 
+            const isTenzil = newRankObj.id < currentRankData.rank;
+
             const embed = buildModEmbed(
-                `👮 Terfi İşlemi Başarılı`,
-                '#00FF00',
+                `👮 Rütbe Değişikliği Başarılı`,
+                isTenzil ? '#FF0000' : '#00FF00',
                 [
                     { name: '👤 Kullanıcı', value: robloxUser.name, inline: true },
                     { name: '📊 Eski Rütbe', value: oldRankObj.name, inline: true },

@@ -3,10 +3,16 @@ const { config } = require('../modules/constants');
 
 module.exports = {
     name: Events.GuildMemberAdd,
-    async execute(member, client) {
+    async execute(member) {
+        const { hgIstatistik, hgGunlukSifirla } = require('../modules/stats');
+        hgGunlukSifirla();
+        hgIstatistik.toplamKatilan++;
+        hgIstatistik.bugunKatilan++;
+
         if (!config.WELCOME_CHANNEL_ID) return;
+        
         try {
-            const channel = await client.channels.fetch(config.WELCOME_CHANNEL_ID).catch(() => null);
+            const channel = await member.guild.channels.fetch(config.WELCOME_CHANNEL_ID).catch(() => null);
             if (!channel) return;
 
             const embed = new EmbedBuilder()
@@ -23,6 +29,8 @@ module.exports = {
                 .setFooter({ text: 'Sentura 🦸 ekoyildiz' });
 
             await channel.send({ embeds: [embed] });
-        } catch { /* welcome kanalı yoksa sessizce geç */ }
+        } catch (error) {
+            console.error('[Welcome Event Error]', error);
+        }
     },
 };

@@ -2,13 +2,16 @@ const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { addModCase } = require('../../modules/moderationUtils');
 const { buildDMEmbed, buildModEmbed, sendDM, sendLog } = require('../../modules/embedBuilders');
 const { config } = require('../../modules/constants');
+const { JsonDatabase } = require('../../modules/jsonDatabase');
+
+const tempmuteDatabase = new JsonDatabase('tempmutes.json');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('mute')
-        .setDescription('Kullanıcıyı süresiz susturur.')
-        .addUserOption(opt => opt.setName('kullanici').setDescription('Susturulacak kişi').setRequired(true))
-        .addStringOption(opt => opt.setName('sebep').setDescription('Susturma sebebi').setRequired(false))
+        .setName('unmute')
+        .setDescription('Kullanıcının susturmasını kaldırır.')
+        .addUserOption(opt => opt.setName('kullanici').setDescription('Susturma kaldırılacak kişi').setRequired(true))
+        .addStringOption(opt => opt.setName('sebep').setDescription('Unmute sebebi').setRequired(false))
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
     async execute(interaction, client) {
         const user = interaction.options.getUser('kullanici');
@@ -18,22 +21,26 @@ module.exports = {
         if (!member) return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamadı!', flags: 64 });
 
         const muteRole = interaction.guild.roles.cache.get(config.MUTE_ROLE_ID);
-        if (!muteRole) return interaction.reply({ content: '❌ Susturulmuş rolü bulunamadı! Lütfen ayarlardan kontrol edin.', flags: 64 });
+        if (!muteRole) return interaction.reply({ content: '❌ Susturulmuş rolü bulunamadı!', flags: 64 });
 
-        if (member.roles.cache.has(muteRole.id)) {
-            return interaction.reply({ content: '❌ Bu kullanıcı zaten susturulmuş!', flags: 64 });
+        if (!member.roles.cache.has(muteRole.id)) {
+            return interaction.reply({ content: '❌ Bu kullanıcı zaten susturulmuş değil!', flags: 64 });
         }
 
-        const caseId = addModCase('MUTE', user.id, interaction.user.id, reason);
-        const dmEmbed = buildDMEmbed('mute', interaction.guild.name, interaction.user.tag, reason, `Vaka ID: #${caseId}`);
+        tempmuteDatabase.delete(user.id);
+        const caseId = addModCase('UNMUTE', user.id, interaction.user.id, reason);
+
+        const dmEmbed = buildDMEmbed('unmute', interaction.guild.name, interaction.user.tag, reason,
+            `Vaka ID: #${caseId}`
+        );
         const dmSent = await sendDM(user, dmEmbed);
 
         try {
-            await member.roles.add(muteRole, `[Vaka #${caseId}] ${reason} | Yetkili: ${interaction.user.tag}`);
+            await member.roles.remove(muteRole, `[#${caseId}] ${reason} | Yetkili: ${interaction.user.tag}`);
 
             const embed = buildModEmbed(
-                `🔇 Susturma İşlemi | Vaka #${caseId}`,
-                '#FFA500',
+                `🔊 Susturma Kaldırıldı | Vaka #${caseId}`,
+                '#00FF00',
                 [
                     { name: '👤 Kullanıcı', value: `${user.tag}\n(${user.id})`, inline: true },
                     { name: '👮 Yetkili', value: interaction.user.tag, inline: true },
@@ -44,7 +51,7 @@ module.exports = {
             await interaction.reply({ embeds: [embed] });
             await sendLog(client, embed);
         } catch (error) {
-            await interaction.reply({ content: `❌ Susturma işlemi başarısız: ${error.message}`, flags: 64 });
+            await interaction.reply({ content: `❌ Unmute işlemi başarısız: ${error.message}`, flags: 64 });
         }
     },
 };
