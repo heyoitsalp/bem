@@ -54,6 +54,86 @@ async function handleButtonInteraction(interaction, client) {
             });
         }
     }
+
+    // --- SİSTEM KONTROL PANELİ BUTONLARI ---
+    if (customId.startsWith('btn_toggle_') || customId.startsWith('btn_all_')) {
+        const { status } = require('../../api');
+        const { buildModEmbed, sendLog } = require('./embedBuilders');
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
+
+        // Yetki kontrolü (Sadece yetkililer basabilsin)
+        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+            return interaction.reply({ content: '❌ Bu butonları kullanmak için yeterli yetkiniz yok!', flags: 64 });
+        }
+
+        let systemName = '';
+        let newState = false;
+
+        if (customId === 'btn_toggle_game') {
+            status.isGameOpen = !status.isGameOpen;
+            newState = status.isGameOpen;
+            systemName = 'Ana Oyun Girişleri';
+        } else if (customId === 'btn_toggle_market') {
+            status.isMarketOpen = !status.isMarketOpen;
+            newState = status.isMarketOpen;
+            systemName = 'Rütbe Market';
+        } else if (customId === 'btn_toggle_adalet') {
+            status.isAdaletSarayOpen = !status.isAdaletSarayOpen;
+            newState = status.isAdaletSarayOpen;
+            systemName = 'Adalet Sarayı';
+        } else if (customId === 'btn_all_open') {
+            status.isGameOpen = true;
+            status.isMarketOpen = true;
+            status.isAdaletSarayOpen = true;
+            systemName = 'Tüm Sistemler';
+            newState = true;
+        } else if (customId === 'btn_all_close') {
+            status.isGameOpen = false;
+            status.isMarketOpen = false;
+            status.isAdaletSarayOpen = false;
+            systemName = 'Tüm Sistemler';
+            newState = false;
+        }
+
+        // Güncellenmiş Embed ve Butonları Oluştur
+        const embed = new EmbedBuilder()
+            .setColor('#2B2D31')
+            .setTitle('🎛️ Eko Yıldız Sistem Kontrol Paneli')
+            .setDescription('Aşağıdaki butonları kullanarak Roblox oyun sistemlerini aktif veya pasif hale getirebilirsiniz. Bu paneldeki değişiklikler **anında** oyuna yansıyacaktır.')
+            .addFields(
+                { name: '🎮 Ana Oyun Girişleri', value: status.isGameOpen ? '🟢 **AÇIK**' : '🔴 **KAPALI**', inline: true },
+                { name: '🛒 Rütbe Market', value: status.isMarketOpen ? '🟢 **AÇIK**' : '🔴 **KAPALI**', inline: true },
+                { name: '⚖️ Adalet Sarayı', value: status.isAdaletSarayOpen ? '🟢 **AÇIK**' : '🔴 **KAPALI**', inline: true }
+            )
+            .setImage('https://i.imgur.com/B9B1vFm.png')
+            .setFooter({ text: `Son işlem: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+            .setTimestamp();
+
+        const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('btn_toggle_game').setLabel('Oyun Girişleri').setEmoji('🎮').setStyle(status.isGameOpen ? ButtonStyle.Success : ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('btn_toggle_market').setLabel('Rütbe Market').setEmoji('🛒').setStyle(status.isMarketOpen ? ButtonStyle.Success : ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('btn_toggle_adalet').setLabel('Adalet Sarayı').setEmoji('⚖️').setStyle(status.isAdaletSarayOpen ? ButtonStyle.Success : ButtonStyle.Danger)
+        );
+
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('btn_all_open').setLabel('Tümünü Aç').setEmoji('✅').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('btn_all_close').setLabel('Tümünü Kapat').setEmoji('❌').setStyle(ButtonStyle.Secondary)
+        );
+
+        await interaction.update({ embeds: [embed], components: [row1, row2] });
+
+        // Mod log gönder
+        const logEmbed = buildModEmbed(
+            newState ? '🟢 Sistem Aktif Edildi' : '🔴 Sistem Kapatıldı',
+            newState ? '#00FF00' : '#FF0000',
+            [
+                { name: '⚙️ Sistem', value: systemName, inline: true },
+                { name: '📊 Durum', value: newState ? '**AÇIK**' : '**KAPALI**', inline: true },
+                { name: '👮 Yetkili', value: interaction.user.tag, inline: true }
+            ]
+        );
+        await sendLog(client, logEmbed);
+    }
 }
 
 module.exports = { handleButtonInteraction };
