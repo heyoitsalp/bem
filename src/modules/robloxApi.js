@@ -35,12 +35,12 @@ async function getRobloxUserById(userId) {
     }
 }
 
-async function getUserRankInGroup(userId) {
+async function getUserRankInGroup(userId, groupId = ROBLOX_GROUP_ID) {
     try {
         const response = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
         const data = await response.json();
         if (data && data.data) {
-            const group = data.data.find(g => g.group.id === ROBLOX_GROUP_ID);
+            const group = data.data.find(g => g.group.id === groupId);
             if (group) return { rank: group.role.rank, name: group.role.name };
         }
         return { rank: 0, name: 'Grup Üyesi Değil' };
@@ -62,10 +62,13 @@ async function getGroupMemberCount() {
 // ============================================================
 //  RANK SYSTEM - CACHE
 // ============================================================
-async function getGroupRoles() {
-    if (groupRolesCache) return groupRolesCache;
+async function getGroupRoles(groupId = ROBLOX_GROUP_ID) {
+    // Farklı gruplar için ayrı cache tutalım
+    if (groupId === ROBLOX_GROUP_ID && groupRolesCache) return groupRolesCache;
+    if (groupId === KAYIT_GRUP_ID && kayitGrupRolCache) return kayitGrupRolCache;
+
     try {
-        const response = await fetch(`https://groups.roblox.com/v1/groups/${ROBLOX_GROUP_ID}/roles`, {
+        const response = await fetch(`https://groups.roblox.com/v1/groups/${groupId}/roles`, {
             headers: {
                 'Cookie': `.ROBLOSECURITY=${ROBLOX_COOKIE}`
             }
@@ -74,17 +77,26 @@ async function getGroupRoles() {
             throw new Error(`Grup rolleri alınamadı: ${response.status}`);
         }
         const data = await response.json();
-        groupRolesCache = data.roles || [];
-        console.log(`[✅] ${groupRolesCache.length} grup rolü yüklendi.`);
-        return groupRolesCache;
+        
+        if (groupId === ROBLOX_GROUP_ID) {
+            groupRolesCache = data.roles || [];
+            console.log(`[✅] Ana grup için ${groupRolesCache.length} rol yüklendi.`);
+            return groupRolesCache;
+        } else if (groupId === KAYIT_GRUP_ID) {
+            kayitGrupRolCache = data.roles || [];
+            console.log(`[✅ KAYIT] Kayıt grubu için ${kayitGrupRolCache.length} rol yüklendi.`);
+            return kayitGrupRolCache;
+        }
+        
+        return data.roles || [];
     } catch (err) {
-        console.error('[❌] Grup rolleri çekilirken hata:', err.message);
+        console.error(`[❌] Grup (${groupId}) rolleri çekilirken hata:`, err.message);
         return [];
     }
 }
 
-async function getRoleIdByRank(rankNumber) {
-    const roles = await getGroupRoles();
+async function getRoleIdByRank(rankNumber, groupId = ROBLOX_GROUP_ID) {
+    const roles = await getGroupRoles(groupId);
     const role = roles.find(r => r.rank === rankNumber);
     return role ? role.id : null;
 }
@@ -113,15 +125,15 @@ async function getCsrfToken() {
 // ============================================================
 //  SET RANK
 // ============================================================
-async function setRobloxRank(userId, rankNumber) {
-    const roleId = await getRoleIdByRank(rankNumber);
+async function setRobloxRank(userId, rankNumber, groupId = ROBLOX_GROUP_ID) {
+    const roleId = await getRoleIdByRank(rankNumber, groupId);
     if (!roleId) {
         throw new Error(`Rank ${rankNumber} için role ID bulunamadı. Grup rolleri cache'ini kontrol edin.`);
     }
 
     const csrfToken = await getCsrfToken();
 
-    const response = await fetch(`https://groups.roblox.com/v1/groups/${ROBLOX_GROUP_ID}/users/${userId}`, {
+    const response = await fetch(`https://groups.roblox.com/v1/groups/${groupId}/users/${userId}`, {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json',

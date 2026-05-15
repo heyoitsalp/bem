@@ -1,7 +1,7 @@
 const { Events } = require('discord.js');
 const { selamlamaDesenleri, cevapHavuzu, rastgeleCevap } = require('../modules/selamlamaUtils');
 
-const selamlamaCooldown = new Map();
+const { selamlamaCooldown } = require('../modules/stats');
 const COOLDOWN_MS = 6000;
 
 module.exports = {

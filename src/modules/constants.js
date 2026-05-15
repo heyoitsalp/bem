@@ -4,6 +4,7 @@
 
 const configManager = require('./configManager');
 const config = configManager.config;
+const TOKEN = configManager.get('TOKEN');
 
 // ============================================================
 //  ROBLOX SETUP
@@ -130,6 +131,7 @@ const titleMap = {
 
 module.exports = {
     config,
+    TOKEN,
     ROBLOX_GROUP_ID,
     ROBLOX_COOKIE,
     rankList,
