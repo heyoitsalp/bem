@@ -8,6 +8,7 @@ const {
     kayitGetirMevcutRank, kayitSetRobloxRank 
 } = require('../modules/robloxApi');
 const { sendLog } = require('../modules/embedBuilders');
+const autoResponder = require('../modules/autoResponder');
 
 const kayitCooldown = new Map();
 
@@ -15,6 +16,13 @@ module.exports = {
     name: Events.MessageCreate,
     async execute(message, client) {
         if (message.author.bot) return;
+
+        // Auto Responder Check
+        const response = autoResponder.handle(message);
+        if (response) {
+            return message.reply(response);
+        }
+
         if (message.guildId !== KAYIT_GUILD_ID) return;
         if (message.channelId !== KAYIT_KANAL_ID) return;
 

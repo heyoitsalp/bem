@@ -2,7 +2,8 @@
 //  CONSTANTS & CONFIGURATION
 // ============================================================
 
-const config = require('../config.json');
+const configManager = require('./configManager');
+const config = configManager.config;
 
 // ============================================================
 //  ROBLOX SETUP
